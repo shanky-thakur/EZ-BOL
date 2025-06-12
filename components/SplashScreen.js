@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Animated, View, Image, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, View, Image, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 
@@ -11,11 +11,7 @@ export default function SplashScreen({ navigation }) {
       toValue: 1,
       duration: 1500,
       useNativeDriver: true,
-    }).start(() => {
-      setTimeout(() => {
-        navigation.replace('Home');
-      }, 1000)
-    });
+    }).start();
   }, []);
 
   return (
@@ -30,12 +26,19 @@ export default function SplashScreen({ navigation }) {
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
         >
+          <View style={styles.preGradientContainerBody}></View>
           <View style={styles.gradientContainerBody}>
             <Animated.Image
               source={require('../assets/EZ_BOL-removebg-preview.png')}
               resizeMode="cover"
               style={{ transform: [{ scale }] }}
             />
+          </View>
+
+          <View style={styles.postGradientContainerBody}>
+            <TouchableOpacity style={styles.postGradientContainerBodyButton} onPress={() => navigation.replace('Home')}>
+              <Text style={styles.customButtonText}>Get Started</Text>
+            </TouchableOpacity>
           </View>
         </LinearGradient>
       </View>
@@ -63,7 +66,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   bottom: {
     width: '100%',
@@ -71,8 +74,31 @@ const styles = StyleSheet.create({
   },
   gradientContainerBody: {
     width: '55%',
-    height: '25%',
+    height: '40%',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
+  preGradientContainerBody: {
+    width: '100%',
+    height: '20%'
+  },
+  postGradientContainerBody: {
+    width: '90%',
+    height: '35%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    flexDirection: 'column'
+  },
+  postGradientContainerBodyButton: {
+    width: '85%',
+    height: '15%',
+    backgroundColor: '#333333',
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  customButtonText: {
+    color: '#fff',
+    fontSize: 15
+  }
 });
