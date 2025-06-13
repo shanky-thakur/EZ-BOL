@@ -16,8 +16,33 @@ import { Ionicons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
+  const [bols, setBols] = useState([
+    { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045' },
+    { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046' },
+    { id: 3, date: '2025-06-08', location: 'Chennai', packageName: 'BOL2024-IND-00047' },
+    { id: 4, date: '2025-06-07', location: 'Kolkata', packageName: 'BOL2024-IND-00048' },
+    { id: 5, date: '2025-06-06', location: 'Hyderabad', packageName: 'BOL2024-IND-00049' },
+    { id: 6, date: '2025-06-05', location: 'Pune', packageName: 'BOL2024-IND-00050' },
+    { id: 7, date: '2025-06-04', location: 'Ahmedabad', packageName: 'BOL2024-IND-00051' },
+    { id: 8, date: '2025-06-03', location: 'Jaipur', packageName: 'BOL2024-IND-00052' },
+    { id: 9, date: '2025-06-02', location: 'Lucknow', packageName: 'BOL2024-IND-00053' },
+    { id: 10, date: '2025-06-01', location: 'Bhopal', packageName: 'BOL2024-IND-00054' },
+    { id: 11, date: '2025-05-31', location: 'Nagpur', packageName: 'BOL2024-IND-00055' },
+    { id: 12, date: '2025-05-30', location: 'Chandigarh', packageName: 'BOL2024-IND-00056' },
+    { id: 13, date: '2025-05-29', location: 'Goa', packageName: 'BOL2024-IND-00057' },
+    { id: 14, date: '2025-05-28', location: 'Surat', packageName: 'BOL2024-IND-00058' },
+    { id: 15, date: '2025-05-27', location: 'Patna', packageName: 'BOL2024-IND-00059' },
+    { id: 16, date: '2025-05-26', location: 'Indore', packageName: 'BOL2024-IND-00060' },
+    { id: 17, date: '2025-05-25', location: 'Kanpur', packageName: 'BOL2024-IND-00061' },
+    { id: 18, date: '2025-05-24', location: 'Ranchi', packageName: 'BOL2024-IND-00062' },
+    { id: 19, date: '2025-05-23', location: 'Guwahati', packageName: 'BOL2024-IND-00063' },
+    { id: 20, date: '2025-05-22', location: 'Dehradun', packageName: 'BOL2024-IND-00064' },
+  ]);
+
+  const [selectedBol, setSelectedBol] = useState(bols[0]);
+
   const [chat, setChat] = useState([
-    { id: 1, role: 'bot', text: 'Hello, I am BOLy! how may I help you update the BOL: BOL2024-IND-00045?' },
+    { id: 1, role: 'bot', text: 'Hello, I am BOLy! how may I help you update the BOL?' },
     { id: 2, role: 'user', text: 'Yes I find weight should be 55Kgs not 50Kgs' },
     { id: 3, role: 'bot', text: 'Okay, Let me update the BOL central servers about this one' },
     { id: 4, role: 'bot', text: 'Do you find anything else to be updated?' },
@@ -60,20 +85,21 @@ export default function HomeScreen() {
               ]}
             >
               <ScrollView contentContainerStyle={styles.drawerContent}>
-                {Array.from({ length: 30 }).map((_, i) => (
-                  <Text key={i} style={styles.drawerItem}>
-                    BOL2024-IND-00045
-                  </Text>
+                {bols.map((bol) => (
+                  <TouchableOpacity key={bol.id} style={styles.drawerItem} onPress={() => { setSelectedBol(bol); toggleMenu(); }}>
+                    <Text style={styles.drawerText}>📦 {bol.packageName}</Text>
+                    <Text style={styles.drawerTextSmall}>📍 {bol.location} | 📅 {bol.date}</Text>
+                  </TouchableOpacity>
                 ))}
+
               </ScrollView>
             </Animated.View>
 
-
             {/* Top Bar */}
             <View style={styles.preGradientContainerBody}>
-              <View style={styles.mexuTextBox}>
-                <Text style={styles.menuHeader}>BOL2024-IND-00045</Text>
-              </View>
+              <Text style={styles.menuHeader}>
+                BOL: {selectedBol?.packageName}
+              </Text>
               <TouchableOpacity onPress={toggleMenu}>
                 <Ionicons name='menu' size={32} color='white' />
               </TouchableOpacity>
@@ -208,11 +234,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  drawerItem: {
-    color: 'white',
-    fontSize: 18,
-    marginVertical: 10,
-  },
   messageArea: {
     height: '95%',
     width: '95%',
@@ -289,5 +310,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
   },
-
+  drawerItem: {
+    backgroundColor: '#444',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    width: '100%',
+  },
+  drawerText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  drawerTextSmall: {
+    color: '#ccc',
+    fontSize: 13,
+    marginTop: 4,
+  },
 });
