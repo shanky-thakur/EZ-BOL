@@ -35,7 +35,7 @@ export default function BOLChatInterface() {
   const [messageInput, setMessageInput] = useState('');
   const [awaitingResponse, setAwaitingResponse] = useState(false);
 
-  // Same conversation flow logic as before
+  // conversation flow logic 
   const conversationFlow = [
     {
       type: 'bot',
@@ -64,7 +64,7 @@ export default function BOLChatInterface() {
     }
   ];
 
-  // Rest of your logic methods remain the same...
+  // Rest of logic
   const getAlternativeFlow = (step, response) => {
     switch (step) {
       case 0:
