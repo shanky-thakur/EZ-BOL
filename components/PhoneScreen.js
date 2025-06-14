@@ -37,7 +37,7 @@ export default function PhoneNumber({ navigation }) {
     const handleNext = () => {
         if (phoneNumber.length >= 7) {
             const fullPhoneNumber = `${selectedCountry.dialCode}${phoneNumber}`;
-            navigation.replace('Home');
+            navigation.replace('Otp');
         } else {
             alert('Please enter a valid phone number');
         }
