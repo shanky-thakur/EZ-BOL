@@ -1,330 +1,592 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
+import React, { useState, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  TextInput, 
   StyleSheet,
-  TouchableOpacity,
+  SafeAreaView,
   Animated,
-  Dimensions,
-  ScrollView,
-  TextInput
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
-
-export default function HomeScreen() {
+export default function BOLChatInterface() {
   const [bols, setBols] = useState([
-    { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045' },
-    { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046' },
-    { id: 3, date: '2025-06-08', location: 'Chennai', packageName: 'BOL2024-IND-00047' },
-    { id: 4, date: '2025-06-07', location: 'Kolkata', packageName: 'BOL2024-IND-00048' },
-    { id: 5, date: '2025-06-06', location: 'Hyderabad', packageName: 'BOL2024-IND-00049' },
-    { id: 6, date: '2025-06-05', location: 'Pune', packageName: 'BOL2024-IND-00050' },
-    { id: 7, date: '2025-06-04', location: 'Ahmedabad', packageName: 'BOL2024-IND-00051' },
-    { id: 8, date: '2025-06-03', location: 'Jaipur', packageName: 'BOL2024-IND-00052' },
-    { id: 9, date: '2025-06-02', location: 'Lucknow', packageName: 'BOL2024-IND-00053' },
-    { id: 10, date: '2025-06-01', location: 'Bhopal', packageName: 'BOL2024-IND-00054' },
-    { id: 11, date: '2025-05-31', location: 'Nagpur', packageName: 'BOL2024-IND-00055' },
-    { id: 12, date: '2025-05-30', location: 'Chandigarh', packageName: 'BOL2024-IND-00056' },
-    { id: 13, date: '2025-05-29', location: 'Goa', packageName: 'BOL2024-IND-00057' },
-    { id: 14, date: '2025-05-28', location: 'Surat', packageName: 'BOL2024-IND-00058' },
-    { id: 15, date: '2025-05-27', location: 'Patna', packageName: 'BOL2024-IND-00059' },
-    { id: 16, date: '2025-05-26', location: 'Indore', packageName: 'BOL2024-IND-00060' },
-    { id: 17, date: '2025-05-25', location: 'Kanpur', packageName: 'BOL2024-IND-00061' },
-    { id: 18, date: '2025-05-24', location: 'Ranchi', packageName: 'BOL2024-IND-00062' },
-    { id: 19, date: '2025-05-23', location: 'Guwahati', packageName: 'BOL2024-IND-00063' },
-    { id: 20, date: '2025-05-22', location: 'Dehradun', packageName: 'BOL2024-IND-00064' },
+    { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045', status: 'pending' },
+    { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046', status: 'pending' },
+    { id: 3, date: '2025-06-08', location: 'Chennai', packageName: 'BOL2024-IND-00047', status: 'pending' },
+    { id: 4, date: '2025-06-07', location: 'Kolkata', packageName: 'BOL2024-IND-00048', status: 'pending' },
+    { id: 5, date: '2025-06-06', location: 'Hyderabad', packageName: 'BOL2024-IND-00049', status: 'pending' },
+    { id: 6, date: '2025-06-05', location: 'Pune', packageName: 'BOL2024-IND-00050', status: 'pending' },
+    { id: 7, date: '2025-06-04', location: 'Ahmedabad', packageName: 'BOL2024-IND-00051', status: 'pending' },
+    { id: 8, date: '2025-06-03', location: 'Jaipur', packageName: 'BOL2024-IND-00052', status: 'pending' },
+    { id: 9, date: '2025-06-02', location: 'Lucknow', packageName: 'BOL2024-IND-00053', status: 'pending' },
+    { id: 10, date: '2025-06-01', location: 'Bhopal', packageName: 'BOL2024-IND-00054', status: 'pending' },
   ]);
 
   const [selectedBol, setSelectedBol] = useState(bols[0]);
-
-  const [chat, setChat] = useState([
-    { id: 1, role: 'bot', text: 'Hello, I am BOLy! how may I help you update the BOL?' },
-    { id: 2, role: 'user', text: 'Yes I find weight should be 55Kgs not 50Kgs' },
-    { id: 3, role: 'bot', text: 'Okay, Let me update the BOL central servers about this one' },
-    { id: 4, role: 'bot', text: 'Do you find anything else to be updated?' },
-    { id: 5, role: 'user', text: 'Yes, actually I also see that height is incorrect, it should be 5ft instead of 4ft' },
-    { id: 6, role: 'bot', text: 'Sure, lets update the details, in the mean time check if any more updates are needed, until I get this one done!' },
-    { id: 7, role: 'user', text: 'No, I think we are good for now...' },
-  ]);
-  const [messageInput, setMessageInput] = useState('');
-
+  const [conversationStep, setConversationStep] = useState(0);
+  const [conversation, setConversation] = useState([]);
   const [menuVisible, setMenuVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-width * 0.8)).current;
+  const [waitingForInput, setWaitingForInput] = useState(false);
+  const [inputType, setInputType] = useState('');
+  const [messageInput, setMessageInput] = useState('');
+  const [awaitingResponse, setAwaitingResponse] = useState(false);
 
-  const toggleMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: menuVisible ? -width * 0.8 : 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-    setMenuVisible(!menuVisible);
+  // Same conversation flow logic as before
+  const conversationFlow = [
+    {
+      type: 'bot',
+      text: `Hello! I'm BOLy, your logistics assistant. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
+      options: ['Yes', 'No']
+    },
+    {
+      type: 'bot',
+      text: 'Great! Before we proceed, please confirm the package details. Is the weight listed as 50 Kgs correct?',
+      options: ['Yes, correct', 'No, needs update']
+    },
+    {
+      type: 'bot',
+      text: 'Perfect! Is the pickup location confirmed as the address on file?',
+      options: ['Yes, confirmed', 'No, address changed']
+    },
+    {
+      type: 'bot',
+      text: 'Excellent! Your pickup is scheduled. Do you need any special handling instructions?',
+      options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
+    },
+    {
+      type: 'bot',
+      text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed. You'll receive a tracking number shortly. Anything else I can help with?`,
+      options: ['No, thank you', 'Yes, I have questions']
+    }
+  ];
+
+  // Rest of your logic methods remain the same...
+  const getAlternativeFlow = (step, response) => {
+    switch (step) {
+      case 0:
+        if (response === 'No') {
+          return {
+            type: 'bot',
+            text: 'No problem! When would you like to schedule the pickup?',
+            options: ['Today', 'Tomorrow', 'Next week']
+          };
+        }
+        break;
+      case 1:
+        if (response === 'No, needs update') {
+          setWaitingForInput(true);
+          setInputType('weight');
+          return {
+            type: 'bot',
+            text: 'I understand. Please type the correct weight below and I\'ll update it for you.',
+            options: null,
+            requiresInput: true
+          };
+        }
+        break;
+      case 2:
+        if (response === 'No, address changed') {
+          setWaitingForInput(true);
+          setInputType('address');
+          return {
+            type: 'bot',
+            text: 'Got it! Please type the new pickup address below and I\'ll update it in the system.',
+            options: null,
+            requiresInput: true
+          };
+        }
+        break;
+      default:
+        return conversationFlow[step + 1];
+    }
+    return conversationFlow[step + 1];
   };
 
+  const handleTextInput = (inputText) => {
+    if (!inputText.trim()) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      text: inputText
+    };
+
+    let botResponse;
+    switch (inputType) {
+      case 'weight':
+        botResponse = {
+          id: Date.now() + 1,
+          role: 'bot',
+          text: `Perfect! I've updated the weight to ${inputText}. The system has been notified. Now, is the pickup location confirmed as the address on file?`,
+          options: ['Yes, confirmed', 'No, address changed']
+        };
+        break;
+      case 'address':
+        botResponse = {
+          id: Date.now() + 1,
+          role: 'bot',
+          text: `Great! I've updated the pickup address to: ${inputText}. The system has been updated. Now, do you need any special handling instructions?`,
+          options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
+        };
+        break;
+      default:
+        botResponse = {
+          id: Date.now() + 1,
+          role: 'bot',
+          text: `Thank you for the information: ${inputText}. Let me continue with the next step.`,
+          options: ['Continue']
+        };
+    }
+
+    setConversation(prev => [...prev, userMessage]);
+    setWaitingForInput(false);
+    setInputType('');
+    setMessageInput('');
+    setAwaitingResponse(true);
+
+    setTimeout(() => {
+      setConversation(prev => [...prev, botResponse]);
+      setAwaitingResponse(false);
+      if (inputType === 'weight') {
+        setConversationStep(2);
+      } else if (inputType === 'address') {
+        setConversationStep(3);
+      }
+    }, 1500);
+  };
+
+  const handleOptionSelect = (option) => {
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      text: option
+    };
+
+    const nextStep = conversationStep + 1;
+    let nextBotMessage;
+
+    const alternativeResponse = getAlternativeFlow(conversationStep, option);
+    if (alternativeResponse) {
+      nextBotMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: alternativeResponse.text,
+        options: alternativeResponse.options,
+        requiresInput: alternativeResponse.requiresInput
+      };
+    } else if (nextStep < conversationFlow.length) {
+      nextBotMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: conversationFlow[nextStep].text,
+        options: conversationFlow[nextStep].options
+      };
+    }
+
+    setConversation(prev => {
+      const newConversation = [...prev];
+      if (newConversation.length > 0) {
+        newConversation[newConversation.length - 1] = {
+          ...newConversation[newConversation.length - 1],
+          options: null
+        };
+      }
+      
+      newConversation.push(userMessage);
+      
+      if (nextBotMessage && !nextBotMessage.requiresInput) {
+        setTimeout(() => {
+          setConversation(prev => [...prev, nextBotMessage]);
+        }, 1000);
+      } else if (nextBotMessage && nextBotMessage.requiresInput) {
+        setTimeout(() => {
+          setConversation(prev => [...prev, nextBotMessage]);
+        }, 1000);
+      }
+      
+      return newConversation;
+    });
+
+    if (!alternativeResponse || !alternativeResponse.requiresInput) {
+      setConversationStep(nextStep);
+    }
+  };
+
+  useEffect(() => {
+    setConversation([]);
+    setConversationStep(0);
+    setWaitingForInput(false);
+    setAwaitingResponse(false);
+    
+    setTimeout(() => {
+      const initialMessage = {
+        id: Date.now(),
+        role: 'bot',
+        text: conversationFlow[0].text,
+        options: conversationFlow[0].options
+      };
+      setConversation([initialMessage]);
+    }, 500);
+  }, [selectedBol]);
+
   return (
-    <View style={styles.container}>
-      <View style={styles.root}>
-        <StatusBar style='dark' />
-        <View style={styles.statusBar}></View>
-
-        <View style={styles.body}>
-          <LinearGradient
-            style={styles.gradientContainer}
-            colors={['#ffffff', '#f8f8ff']}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-          >
-            {/* Off-canvas menu */}
-            <Animated.View
-              style={[
-                styles.drawerMenu,
-                { transform: [{ translateX: slideAnim }] },
-              ]}
-            >
-              <ScrollView contentContainerStyle={styles.drawerContent}>
-                {bols.map((bol) => (
-                  <TouchableOpacity key={bol.id} style={styles.drawerItem} onPress={() => { setSelectedBol(bol); toggleMenu(); }}>
-                    <Text style={styles.drawerText}>📦 {bol.packageName}</Text>
-                    <Text style={styles.drawerTextSmall}>📍 {bol.location} | 📅 {bol.date}</Text>
-                  </TouchableOpacity>
-                ))}
-
-              </ScrollView>
-            </Animated.View>
-
-            {/* Top Bar */}
-            <View style={styles.preGradientContainerBody}>
-              <Text style={styles.menuHeader}>
-                BOL: {selectedBol?.packageName}
-              </Text>
-              <TouchableOpacity onPress={toggleMenu}>
-                <Ionicons name='menu' size={32} color='white' />
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Sidebar Menu */}
+        {menuVisible && (
+          <View style={styles.sidebar}>
+            <View style={styles.sidebarHeader}>
+              <Text style={styles.sidebarTitle}>Select BOL</Text>
+              <TouchableOpacity onPress={() => setMenuVisible(false)}>
+                <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.gradientContainerBody}>
-              <ScrollView contentContainerStyle={{ padding: 12 }}>
-                {chat.map(msg => (
-                  <View
-                    key={msg.id}
-                    style={[
-                      styles.messageRow,
-                      msg.role === 'user' ? styles.messageRowUser : styles.messageRowBot
-                    ]}
-                  >
-                    {msg.role === 'bot' && (
-                      <Ionicons name="chatbox-ellipses" size={20} color="black" style={styles.icon} />
-                    )}
-                    <View style={[
-                      styles.messageBubble,
-                      msg.role === 'user' ? styles.userBubble : styles.botBubble
-                    ]}>
-                      <Text style={styles.messageText}>{msg.text}</Text>
-                    </View>
-                    {msg.role === 'user' && (
-                      <Ionicons name="person-circle" size={20} color="black" style={styles.icon} />
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-
-            <View style={styles.postGradientContainerBody}>
-              <View style={styles.messageArea}>
-                <TextInput style={styles.messageBox}
-                  multiline={true}
-                  numberOfLines={10}
-                  placeholder='Enter a message here'
-                  placeholderTextColor="#999"
-                  value={messageInput}
-                  onChangeText={setMessageInput}
-                >
-                </TextInput>
-                <TouchableOpacity style={styles.sendButton}
+            <ScrollView style={styles.bolList}>
+              {bols.map((bol) => (
+                <TouchableOpacity
+                  key={bol.id}
                   onPress={() => {
-                    if (messageInput.trim() !== ' ') {
-                      setChat(prev => [...prev, { id: Date.now(), role: 'user', text: messageInput }]);
-                      setMessageInput('');
-                    }
+                    setSelectedBol(bol);
+                    setMenuVisible(false);
                   }}
+                  style={[
+                    styles.bolItem,
+                    selectedBol?.id === bol.id ? styles.selectedBol : styles.unselectedBol
+                  ]}
                 >
-                  <Ionicons name='send' size={24} color='black'></Ionicons>
+                  <View style={styles.bolHeader}>
+                    <Text style={styles.packageIcon}>📦</Text>
+                    <Text style={[styles.packageName, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
+                      {bol.packageName}
+                    </Text>
+                  </View>
+                  <View style={styles.bolDetails}>
+                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
+                      📍 {bol.location}
+                    </Text>
+                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
+                      📅 {bol.date}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
-        <View style={styles.bottom}></View>
-      </View>
-    </View>
+        {/* Main Content */}
+        <View style={styles.mainContent}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
+              <Text style={styles.menuIcon}>☰</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>BOL: {selectedBol?.packageName}</Text>
+          </View>
+
+          {/* Chat Area */}
+          <ScrollView 
+            style={styles.chatArea}
+            contentContainerStyle={styles.chatContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {conversation.map(msg => (
+              <View key={msg.id} style={styles.messageContainer}>
+                <View style={msg.role === 'user' ? styles.userMessageRow : styles.botMessageRow}>
+                  {msg.role === 'bot' && <View style={styles.botAvatar}><Text>🤖</Text></View>}
+                  <View style={msg.role === 'user' ? styles.userMessage : styles.botMessage}>
+                    <Text style={msg.role === 'user' ? styles.userMessageText : styles.botMessageText}>
+                      {msg.text}
+                    </Text>
+                  </View>
+                  {msg.role === 'user' && <View style={styles.userAvatar}><Text>👤</Text></View>}
+                </View>
+                
+                {msg.role === 'bot' && msg.options && (
+                  <View style={styles.optionsContainer}>
+                    {msg.options.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => handleOptionSelect(option)}
+                        style={styles.optionButton}
+                      >
+                        <Text style={styles.optionText}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Input Area */}
+          {waitingForInput && (
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                value={messageInput}
+                onChangeText={setMessageInput}
+                placeholder={`Enter the correct ${inputType}...`}
+                onSubmitEditing={() => handleTextInput(messageInput)}
+                autoFocus
+              />
+              <TouchableOpacity
+                onPress={() => handleTextInput(messageInput)}
+                disabled={!messageInput.trim()}
+                style={[styles.sendButton, !messageInput.trim() && styles.disabledButton]}
+              >
+                <Text style={styles.sendButtonText}>➤</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Status Bar */}
+          {!waitingForInput && (
+            <View style={styles.statusBar}>
+              <Text style={styles.statusText}>
+                {conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
+              </Text>
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f3f4f6',
   },
-  root: {
+  keyboardAvoid: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  statusBar: {
-    width: '100%',
-    height: '4.5%',
-  },
-  bottom: {
-    width: '100%',
-    height: '4.5%',
-  },
-  body: {
-    width: '100%',
-    height: '91%',
-  },
-  gradientContainer: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  preGradientContainerBody: {
-    width: '100%',
-    height: '8%',
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    backgroundColor: 'grey',
-  },
-  gradientContainerBody: {
-    width: '100%',
-    height: '80%'
-  },
-  postGradientContainerBody: {
-    width: '100%',
-    height: '12%',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  mexuTextBox: {
-    width: '85%',
-    height: '90%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuHeader: {
-    fontSize: 20,
-    overflow: 'scroll',
-    color: 'white',
-  },
-  drawerMenu: {
+  sidebar: {
     position: 'absolute',
     top: 0,
     left: 0,
     bottom: 0,
-    width: width * 0.8,
-    backgroundColor: '#333',
-    paddingTop: 10,
-    zIndex: 10,
+    width: 320,
+    backgroundColor: '#1f2937',
+    zIndex: 50,
   },
-  drawerContent: {
+  sidebarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
   },
-  messageArea: {
-    height: '95%',
-    width: '95%',
-    backgroundColor: '#d1d5db',
-    borderRadius: 30,
+  sidebarTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  closeButton: {
+    color: '#9ca3af',
+    fontSize: 18,
+  },
+  bolList: {
+    padding: 16,
+  },
+  bolItem: {
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  selectedBol: {
+    backgroundColor: '#4f46e5',
+  },
+  unselectedBol: {
+    backgroundColor: '#374151',
+  },
+  selectedText: {
+    color: 'white',
+  },
+  unselectedText: {
+    color: '#d1d5db',
+  },
+  bolHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center'
+    marginBottom: 8,
   },
-  messageBox: {
+  packageIcon: {
     fontSize: 18,
-    width: '75%',
-    height: '100%',
-    textAlignVertical: 'top'
+    marginRight: 8,
+  },
+  packageName: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  bolDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bolDetailText: {
+    fontSize: 12,
+  },
+  mainContent: {
+    flex: 1,
+  },
+  header: {
+    backgroundColor: '#4f46e5',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuButton: {
+    padding: 8,
+    marginRight: 16,
+  },
+  menuIcon: {
+    color: 'white',
+    fontSize: 24,
+  },
+  headerTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  chatArea: {
+    flex: 1,
+  },
+  chatContent: {
+    padding: 16,
+    paddingBottom: 100, // Extra padding at bottom to prevent overlap
+  },
+  messageContainer: {
+    marginBottom: 16,
+  },
+  userMessageRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-start',
+  },
+  botMessageRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  botAvatar: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#e0e7ff',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  userMessage: {
+    backgroundColor: '#4f46e5',
+    padding: 12,
+    borderRadius: 8,
+    borderBottomRightRadius: 0,
+    maxWidth: '70%',
+  },
+  botMessage: {
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+    borderBottomLeftRadius: 0,
+    maxWidth: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  userMessageText: {
+    color: 'white',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  botMessageText: {
+    color: '#1f2937',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  optionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    marginLeft: 44,
+  },
+  optionButton: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#dbeafe',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  optionText: {
+    color: '#2563eb',
+    fontSize: 14,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 12,
+    fontSize: 16,
   },
   sendButton: {
-    height: '100%',
-    width: '15%',
-    justifyContent: 'center',
-    alignItems: 'center'
+    backgroundColor: '#4f46e5',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  messageBubble: {
-    maxWidth: '75%',
-    marginVertical: 4,
-    padding: 12,
-    borderRadius: 10,
+  disabledButton: {
+    backgroundColor: '#d1d5db',
   },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#DCF8C6',
-    borderBottomRightRadius: 0,
-  },
-  botBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#E5E7EB',
-    borderTopLeftRadius: 0,
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#000',
-  },
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginVertical: 4,
-    maxWidth: '90%',
-  },
-  messageRowUser: {
-    alignSelf: 'flex-end',
-    justifyContent: 'flex-end',
-  },
-  messageRowBot: {
-    alignSelf: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  icon: {
-    marginHorizontal: 6,
-    marginTop: 4
-  },
-  messageBubble: {
-    maxWidth: '75%',
-    padding: 12,
-    borderRadius: 10,
-  },
-  userBubble: {
-    backgroundColor: '#DCF8C6',
-    borderTopRightRadius: 0,
-  },
-  botBubble: {
-    backgroundColor: '#E5E7EB',
-    borderTopLeftRadius: 0,
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#000',
-  },
-  drawerItem: {
-    backgroundColor: '#444',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    width: '100%',
-  },
-  drawerText: {
+  sendButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 20,
   },
-  drawerTextSmall: {
-    color: '#ccc',
-    fontSize: 13,
-    marginTop: 4,
+  statusBar: {
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    backgroundColor: '#f9fafb',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  statusText: {
+    color: '#6b7280',
+    fontSize: 14,
   },
 });
