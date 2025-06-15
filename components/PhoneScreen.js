@@ -1,8 +1,22 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, TextInput, Modal, FlatList, SafeAreaView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, TextInput, Modal, FlatList, SafeAreaView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+
+// Get the correct API URL for development
+const getApiUrl = () => {
+    if (__DEV__) {
+        // For Expo development - this gets your computer's IP automatically
+        const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
+        return `http://${debuggerHost}:3000`;
+    }
+    // For production, use your actual API URL
+    return 'https://your-production-api.com';
+};
+
+const API_BASE_URL = getApiUrl();
 
 // Predefined countries with emoji flags
 const COUNTRIES = [
@@ -30,16 +44,79 @@ const COUNTRIES = [
 
 export default function PhoneNumber({ navigation }) {
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]); // Default to US
+    const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[1]); // Default to India (+91)
     const [showCountryModal, setShowCountryModal] = useState(false);
     const [searchText, setSearchText] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (phoneNumber.length >= 7) {
-            const fullPhoneNumber = `${selectedCountry.dialCode}${phoneNumber}`;
-            navigation.replace('Otp');
+            const fullPhoneNumber = `${selectedCountry.dialCode} ${phoneNumber}`;
+            const phoneForAPI = `${selectedCountry.dialCode}${phoneNumber}`; // No space for API
+            
+            setIsLoading(true);
+            
+            // Debug logging
+            console.log('API URL:', `${API_BASE_URL}/user/send-otp`);
+            console.log('Phone data:', { phone: phoneForAPI });
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/user/send-otp`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone: phoneForAPI
+                    }),
+                });
+
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('API Response:', data);
+
+                if (response.ok && data.success) {
+                    // Show success message briefly
+                    Alert.alert('Success', data.message || 'OTP sent successfully!', [
+                        {
+                            text: 'OK',
+                            onPress: () => {
+                                // Navigate to OTP screen
+                                navigation.replace('Otp', { 
+                                    phoneNumber: fullPhoneNumber 
+                                });
+                            }
+                        }
+                    ]);
+                } else {
+                    // Handle API errors
+                    Alert.alert(
+                        'Error', 
+                        data.message || data.error || 'Failed to send OTP. Please try again.'
+                    );
+                }
+            } catch (error) {
+                console.error('Network Error Details:', error);
+                console.error('Error name:', error.name);
+                console.error('Error message:', error.message);
+                
+                // More specific error handling
+                if (error.message.includes('Network request failed')) {
+                    Alert.alert(
+                        'Connection Error', 
+                        `Cannot connect to server at ${API_BASE_URL}. Make sure your backend server is running and your device is connected to the same network.`
+                    );
+                } else {
+                    Alert.alert(
+                        'Network Error', 
+                        'Unable to connect to server. Please check your connection and try again.'
+                    );
+                }
+            } finally {
+                setIsLoading(false);
+            }
         } else {
-            alert('Please enter a valid phone number');
+            Alert.alert('Invalid Phone Number', 'Please enter a valid phone number (at least 7 digits)');
         }
     };
 
@@ -132,11 +209,18 @@ export default function PhoneNumber({ navigation }) {
                         <View style={styles.buttonEmptyBox}></View>
                         <View style={styles.buttonBox}>
                             <TouchableOpacity 
-                                style={[styles.customeButton, { opacity: phoneNumber.length > 0 ? 1 : 0.5 }]} 
+                                style={[
+                                    styles.customeButton, 
+                                    { 
+                                        opacity: (phoneNumber.length > 0 && !isLoading) ? 1 : 0.5 
+                                    }
+                                ]} 
                                 onPress={handleNext}
-                                disabled={phoneNumber.length === 0}
+                                disabled={phoneNumber.length === 0 || isLoading}
                             >
-                                <Text style={styles.buttonText}>Next</Text>
+                                <Text style={styles.buttonText}>
+                                    {isLoading ? 'Sending OTP...' : 'Next'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
