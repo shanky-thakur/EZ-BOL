@@ -12,7 +12,10 @@ import {
   Platform
 } from 'react-native';
 
-export default function BOLChatInterface() {
+export default function BOLChatInterface({ navigation, route }) {
+  // Get phone number from previous screen (OTP screen)
+  const phoneNumber = route?.params?.phoneNumber || '+919625348422';
+  
   const [bols, setBols] = useState([
     { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045', status: 'pending' },
     { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046', status: 'pending' },
@@ -35,11 +38,17 @@ export default function BOLChatInterface() {
   const [messageInput, setMessageInput] = useState('');
   const [awaitingResponse, setAwaitingResponse] = useState(false);
 
+  // Log phone number for debugging
+  useEffect(() => {
+    console.log('=== BOL CHAT SCREEN ===');
+    console.log('Phone number received:', phoneNumber);
+  }, [phoneNumber]);
+
   // conversation flow logic 
   const conversationFlow = [
     {
       type: 'bot',
-      text: `Hello! I'm BOLy, your logistics assistant. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
+      text: `Hello! I'm BOLy, your logistics assistant for ${phoneNumber}. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
       options: ['Yes', 'No']
     },
     {
@@ -59,7 +68,7 @@ export default function BOLChatInterface() {
     },
     {
       type: 'bot',
-      text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed. You'll receive a tracking number shortly. Anything else I can help with?`,
+      text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed for ${phoneNumber}. You'll receive a tracking number shortly. Anything else I can help with?`,
       options: ['No, thank you', 'Yes, I have questions']
     }
   ];
@@ -121,7 +130,7 @@ export default function BOLChatInterface() {
         botResponse = {
           id: Date.now() + 1,
           role: 'bot',
-          text: `Perfect! I've updated the weight to ${inputText}. The system has been notified. Now, is the pickup location confirmed as the address on file?`,
+          text: `Perfect! I've updated the weight to ${inputText} for ${phoneNumber}. The system has been notified. Now, is the pickup location confirmed as the address on file?`,
           options: ['Yes, confirmed', 'No, address changed']
         };
         break;
@@ -129,7 +138,7 @@ export default function BOLChatInterface() {
         botResponse = {
           id: Date.now() + 1,
           role: 'bot',
-          text: `Great! I've updated the pickup address to: ${inputText}. The system has been updated. Now, do you need any special handling instructions?`,
+          text: `Great! I've updated the pickup address to: ${inputText} for ${phoneNumber}. The system has been updated. Now, do you need any special handling instructions?`,
           options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
         };
         break;
@@ -231,7 +240,7 @@ export default function BOLChatInterface() {
       };
       setConversation([initialMessage]);
     }, 500);
-  }, [selectedBol]);
+  }, [selectedBol, phoneNumber]); // Added phoneNumber as dependency
 
   return (
     <SafeAreaView style={styles.container}>
@@ -288,7 +297,9 @@ export default function BOLChatInterface() {
             <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
               <Text style={styles.menuIcon}>☰</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>BOL: {selectedBol?.packageName}</Text>
+            <View style={styles.headerInfo}>
+              <Text style={styles.headerTitle}>BOL: {selectedBol?.packageName}</Text>
+            </View>
           </View>
 
           {/* Chat Area */}
@@ -452,11 +463,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 24,
   },
+  headerInfo: {
+    flex: 1,
+  },
   headerTitle: {
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
-    flex: 1,
   },
   chatArea: {
     flex: 1,
@@ -589,4 +602,4 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 14,
   },
-});
+}); 

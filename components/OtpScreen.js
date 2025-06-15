@@ -1,17 +1,55 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, TextInput, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+
+// Get the correct API URL for development
+const getApiUrl = () => {
+    if (__DEV__) {
+        // For Expo development - this gets your computer's IP automatically
+        const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
+        return `http://${debuggerHost}:3000`;
+    }
+    // For production, use your actual API URL
+    return 'https://your-production-api.com';
+};
+
+const API_BASE_URL = getApiUrl();
+
+// Helper function to format phone number for backend
+const formatPhoneForBackend = (phone) => {
+    if (!phone) return '';
+    
+    // Remove all whitespace and non-digit characters except +
+    let cleaned = phone.replace(/[^\d+]/g, '');
+    
+    // Ensure it starts with + and has the country code
+    if (!cleaned.startsWith('+')) {
+        // If it starts with country code without +, add +
+        if (cleaned.startsWith('91') && cleaned.length === 12) {
+            cleaned = '+' + cleaned;
+        } else if (cleaned.length === 10) {
+            // If it's just the 10-digit number, add +91
+            cleaned = '+91' + cleaned;
+        }
+    }
+    
+    return cleaned;
+};
 
 export default function OTPScreen({ navigation, route }) {
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [timer, setTimer] = useState(30);
     const [canResend, setCanResend] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isResending, setIsResending] = useState(false);
     const inputRefs = useRef([]);
 
-    // Get phone number from previous screen (if passed)
-    const phoneNumber = route?.params?.phoneNumber || '+91 9876543210';
+    // Get phone number from previous screen and format it
+    const rawPhoneNumber = route?.params?.phoneNumber || '+919625348422';
+    const phoneNumber = formatPhoneForBackend(rawPhoneNumber);
 
     useEffect(() => {
         // Timer countdown
@@ -55,51 +93,123 @@ export default function OTPScreen({ navigation, route }) {
         }
     };
 
-    const handleVerifyOtp = (otpArray = otp) => {
-        const otpCode = otpArray.join('');
+    const handleVerifyOtp = async (otpArray = otp) => {
+        const otpCode = otpArray.join('').trim();
         
         if (otpCode.length !== 6) {
             Alert.alert('Error', 'Please enter complete 6-digit OTP');
             return;
         }
+
+        setIsLoading(true);
         
-        // Simulate OTP verification
-        if (otpCode === '123456') {
-            Alert.alert('Success', 'OTP verified successfully!', [
-                { text: 'OK', onPress: () => navigation.replace('Home') }
-            ]);
-        } else {
-            Alert.alert('Error', 'Invalid OTP. Please try again.');
+        // Ensure phone number is properly formatted
+        const formattedPhone = formatPhoneForBackend(phoneNumber);
+        
+        // Debug logging
+        console.log('=== FRONTEND DEBUG ===');
+        console.log('Raw Phone from params:', rawPhoneNumber);
+        console.log('Formatted Phone:', formattedPhone);
+        console.log('Phone Length:', formattedPhone.length);
+        console.log('OTP Code:', otpCode);
+        console.log('OTP Length:', otpCode.length);
+        
+        try {
+            const requestBody = {
+                phone: formattedPhone,
+                otp: otpCode
+            };
+            
+            console.log('Request body:', JSON.stringify(requestBody, null, 2));
+            console.log('API URL:', `${API_BASE_URL}/user/verify-otp`);
+
+            const response = await fetch(`${API_BASE_URL}/user/verify-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+            console.log('=== BACKEND RESPONSE ===');
+            console.log('Status:', response.status);
+            console.log('Response:', JSON.stringify(data, null, 2));
+
+            if (response.ok && data.success) {
+                Alert.alert('Success', 'OTP verified successfully!', [
+                    { text: 'OK', onPress: () => navigation.replace('Home', { phoneNumber: formattedPhone }) }
+                ]);
+            } else {
+                console.log('❌ Verification failed');
+                const errorMsg = data.message || 'Invalid OTP. Please try again.';
+                Alert.alert('Error', `${errorMsg}\n\nPhone: ${formattedPhone}\nOTP: ${otpCode}`);
+                // Clear OTP fields
+                setOtp(['', '', '', '', '', '']);
+                inputRefs.current[0]?.focus();
+            }
+        } catch (error) {
+            console.error('❌ Network error:', error);
+            Alert.alert('Error', `Network error: ${error.message}\n\nPlease check your connection and try again.`);
             // Clear OTP fields
             setOtp(['', '', '', '', '', '']);
             inputRefs.current[0]?.focus();
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleResendOtp = () => {
-        if (!canResend) return;
+    const handleResendOtp = async () => {
+        if (!canResend || isResending) return;
         
-        // Reset timer
-        setTimer(30);
-        setCanResend(false);
+        setIsResending(true);
         
-        // Clear current OTP
-        setOtp(['', '', '', '', '', '']);
-        inputRefs.current[0]?.focus();
-
-        Alert.alert('OTP Sent', 'A new OTP has been sent to your phone number.');
-
-        // Restart timer
-        const interval = setInterval(() => {
-            setTimer((prevTimer) => {
-                if (prevTimer <= 1) {
-                    setCanResend(true);
-                    clearInterval(interval);
-                    return 0;
-                }
-                return prevTimer - 1;
+        try {
+            const formattedPhone = formatPhoneForBackend(phoneNumber);
+            
+            const response = await fetch(`${API_BASE_URL}/user/send-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    phone: formattedPhone
+                })
             });
-        }, 1000);
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Reset timer
+                setTimer(30);
+                setCanResend(false);
+                
+                // Clear current OTP
+                setOtp(['', '', '', '', '', '']);
+                inputRefs.current[0]?.focus();
+
+                Alert.alert('OTP Sent', 'A new OTP has been sent to your phone number.');
+
+                // Restart timer
+                const interval = setInterval(() => {
+                    setTimer((prevTimer) => {
+                        if (prevTimer <= 1) {
+                            setCanResend(true);
+                            clearInterval(interval);
+                            return 0;
+                        }
+                        return prevTimer - 1;
+                    });
+                }, 1000);
+            } else {
+                Alert.alert('Error', data.message || 'Failed to send OTP. Please try again.');
+            }
+        } catch (error) {
+            console.error('Resend OTP error:', error);
+            Alert.alert('Error', 'Network error. Please check your connection and try again.');
+        } finally {
+            setIsResending(false);
+        }
     };
 
     const formatTime = (seconds) => {
@@ -107,6 +217,9 @@ export default function OTPScreen({ navigation, route }) {
         const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
+
+    // Format phone number for display (with space for readability)
+    const displayPhoneNumber = phoneNumber.replace(/(\+\d{2})(\d{10})/, '$1 $2');
 
     return (
         <View style={styles.root}>
@@ -126,6 +239,7 @@ export default function OTPScreen({ navigation, route }) {
                                 <TouchableOpacity 
                                     style={styles.backIcon} 
                                     onPress={() => navigation.replace('Phone')}
+                                    disabled={isLoading}
                                 >
                                     <Ionicons name='arrow-back' color='black' size={25} />
                                 </TouchableOpacity>
@@ -139,7 +253,7 @@ export default function OTPScreen({ navigation, route }) {
                                 <Text style={styles.subtitle}>
                                     Enter the 6-digit code sent to
                                 </Text>
-                                <Text style={styles.phoneNumber}>{phoneNumber}</Text>
+                                <Text style={styles.phoneNumber}>{displayPhoneNumber}</Text>
                             </View>
 
                             <View style={styles.otpContainer}>
@@ -158,6 +272,7 @@ export default function OTPScreen({ navigation, route }) {
                                         maxLength={1}
                                         textAlign="center"
                                         selectTextOnFocus
+                                        editable={!isLoading}
                                     />
                                 ))}
                             </View>
@@ -168,14 +283,23 @@ export default function OTPScreen({ navigation, route }) {
                                 </Text>
                                 <TouchableOpacity 
                                     onPress={handleResendOtp}
-                                    disabled={!canResend}
+                                    disabled={!canResend || isResending}
                                 >
-                                    <Text style={[
-                                        styles.resendButton,
-                                        canResend ? styles.resendButtonActive : styles.resendButtonDisabled
-                                    ]}>
-                                        {canResend ? 'Resend OTP' : `Resend in ${formatTime(timer)}`}
-                                    </Text>
+                                    <View style={styles.resendButtonContainer}>
+                                        {isResending && (
+                                            <ActivityIndicator 
+                                                size="small" 
+                                                color="#000000" 
+                                                style={styles.resendLoader}
+                                            />
+                                        )}
+                                        <Text style={[
+                                            styles.resendButton,
+                                            canResend && !isResending ? styles.resendButtonActive : styles.resendButtonDisabled
+                                        ]}>
+                                            {isResending ? 'Sending...' : canResend ? 'Resend OTP' : `Resend in ${formatTime(timer)}`}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -187,12 +311,16 @@ export default function OTPScreen({ navigation, route }) {
                             <TouchableOpacity 
                                 style={[
                                     styles.customeButton, 
-                                    { opacity: otp.every(digit => digit !== '') ? 1 : 0.5 }
+                                    { opacity: (otp.every(digit => digit !== '') && !isLoading) ? 1 : 0.5 }
                                 ]} 
                                 onPress={() => handleVerifyOtp()}
-                                disabled={!otp.every(digit => digit !== '')}
+                                disabled={!otp.every(digit => digit !== '') || isLoading}
                             >
-                                <Text style={styles.buttonText}>Verify OTP</Text>
+                                {isLoading ? (
+                                    <ActivityIndicator size="small" color="#ffffff" />
+                                ) : (
+                                    <Text style={styles.buttonText}>Verify OTP</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -353,6 +481,10 @@ const styles = StyleSheet.create({
         color: '#666666',
         textAlign: 'center'
     },
+    resendButtonContainer: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
     resendButton: {
         fontSize: 14,
         fontWeight: '600',
@@ -363,5 +495,8 @@ const styles = StyleSheet.create({
     },
     resendButtonDisabled: {
         color: '#999999'
+    },
+    resendLoader: {
+        marginRight: 5
     }
 });
