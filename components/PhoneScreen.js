@@ -83,7 +83,7 @@ export default function PhoneNumber({ navigation }) {
                             onPress: () => {
                                 // Navigate to OTP screen
                                 navigation.replace('Otp', { 
-                                    phoneNumber: fullPhoneNumber 
+                                    phoneNumber: fullPhoneNumber || +919625348422
                                 });
                             }
                         }

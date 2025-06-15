@@ -7,240 +7,329 @@ import {
   TextInput, 
   StyleSheet,
   SafeAreaView,
-  Animated,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
+
+// Backend API configuration
+const API_BASE_URL = 'http://your-backend-url.com'; // Replace with your actual backend URL
 
 export default function BOLChatInterface({ navigation, route }) {
   // Get phone number from previous screen (OTP screen)
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
   
-  const [bols, setBols] = useState([
-    { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045', status: 'pending' },
-    { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046', status: 'pending' },
-    { id: 3, date: '2025-06-08', location: 'Chennai', packageName: 'BOL2024-IND-00047', status: 'pending' },
-    { id: 4, date: '2025-06-07', location: 'Kolkata', packageName: 'BOL2024-IND-00048', status: 'pending' },
-    { id: 5, date: '2025-06-06', location: 'Hyderabad', packageName: 'BOL2024-IND-00049', status: 'pending' },
-    { id: 6, date: '2025-06-05', location: 'Pune', packageName: 'BOL2024-IND-00050', status: 'pending' },
-    { id: 7, date: '2025-06-04', location: 'Ahmedabad', packageName: 'BOL2024-IND-00051', status: 'pending' },
-    { id: 8, date: '2025-06-03', location: 'Jaipur', packageName: 'BOL2024-IND-00052', status: 'pending' },
-    { id: 9, date: '2025-06-02', location: 'Lucknow', packageName: 'BOL2024-IND-00053', status: 'pending' },
-    { id: 10, date: '2025-06-01', location: 'Bhopal', packageName: 'BOL2024-IND-00054', status: 'pending' },
-  ]);
-
-  const [selectedBol, setSelectedBol] = useState(bols[0]);
-  const [conversationStep, setConversationStep] = useState(0);
+  const [bols, setBols] = useState([]);
+  const [selectedBol, setSelectedBol] = useState(null);
   const [conversation, setConversation] = useState([]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [waitingForInput, setWaitingForInput] = useState(false);
-  const [inputType, setInputType] = useState('');
+  const [currentField, setCurrentField] = useState('');
+  const [updatedFields, setUpdatedFields] = useState([]);
   const [messageInput, setMessageInput] = useState('');
-  const [awaitingResponse, setAwaitingResponse] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [chatInProgress, setChatInProgress] = useState(false);
 
-  // Log phone number for debugging
-  useEffect(() => {
-    console.log('=== BOL CHAT SCREEN ===');
-    console.log('Phone number received:', phoneNumber);
-  }, [phoneNumber]);
+  // Fetch BOLs from backend
+  const fetchBols = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/bol/get-bols`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone: phoneNumber }),
+      });
 
-  // conversation flow logic 
-  const conversationFlow = [
-    {
-      type: 'bot',
-      text: `Hello! I'm BOLy, your logistics assistant for ${phoneNumber}. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
-      options: ['Yes', 'No']
-    },
-    {
-      type: 'bot',
-      text: 'Great! Before we proceed, please confirm the package details. Is the weight listed as 50 Kgs correct?',
-      options: ['Yes, correct', 'No, needs update']
-    },
-    {
-      type: 'bot',
-      text: 'Perfect! Is the pickup location confirmed as the address on file?',
-      options: ['Yes, confirmed', 'No, address changed']
-    },
-    {
-      type: 'bot',
-      text: 'Excellent! Your pickup is scheduled. Do you need any special handling instructions?',
-      options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
-    },
-    {
-      type: 'bot',
-      text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed for ${phoneNumber}. You'll receive a tracking number shortly. Anything else I can help with?`,
-      options: ['No, thank you', 'Yes, I have questions']
-    }
-  ];
-
-  // Rest of logic
-  const getAlternativeFlow = (step, response) => {
-    switch (step) {
-      case 0:
-        if (response === 'No') {
-          return {
-            type: 'bot',
-            text: 'No problem! When would you like to schedule the pickup?',
-            options: ['Today', 'Tomorrow', 'Next week']
-          };
+      const data = await response.json();
+      
+      if (data.success) {
+        setBols(data.bols);
+        if (data.bols.length > 0) {
+          setSelectedBol(data.bols[0]);
         }
-        break;
-      case 1:
-        if (response === 'No, needs update') {
-          setWaitingForInput(true);
-          setInputType('weight');
-          return {
-            type: 'bot',
-            text: 'I understand. Please type the correct weight below and I\'ll update it for you.',
-            options: null,
-            requiresInput: true
-          };
-        }
-        break;
-      case 2:
-        if (response === 'No, address changed') {
-          setWaitingForInput(true);
-          setInputType('address');
-          return {
-            type: 'bot',
-            text: 'Got it! Please type the new pickup address below and I\'ll update it in the system.',
-            options: null,
-            requiresInput: true
-          };
-        }
-        break;
-      default:
-        return conversationFlow[step + 1];
-    }
-    return conversationFlow[step + 1];
-  };
-
-  const handleTextInput = (inputText) => {
-    if (!inputText.trim()) return;
-
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      text: inputText
-    };
-
-    let botResponse;
-    switch (inputType) {
-      case 'weight':
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Perfect! I've updated the weight to ${inputText} for ${phoneNumber}. The system has been notified. Now, is the pickup location confirmed as the address on file?`,
-          options: ['Yes, confirmed', 'No, address changed']
-        };
-        break;
-      case 'address':
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Great! I've updated the pickup address to: ${inputText} for ${phoneNumber}. The system has been updated. Now, do you need any special handling instructions?`,
-          options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
-        };
-        break;
-      default:
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Thank you for the information: ${inputText}. Let me continue with the next step.`,
-          options: ['Continue']
-        };
-    }
-
-    setConversation(prev => [...prev, userMessage]);
-    setWaitingForInput(false);
-    setInputType('');
-    setMessageInput('');
-    setAwaitingResponse(true);
-
-    setTimeout(() => {
-      setConversation(prev => [...prev, botResponse]);
-      setAwaitingResponse(false);
-      if (inputType === 'weight') {
-        setConversationStep(2);
-      } else if (inputType === 'address') {
-        setConversationStep(3);
+      } else {
+        Alert.alert('Error', data.message || 'Failed to fetch BOLs');
       }
-    }, 1500);
+    } catch (error) {
+      console.error('Error fetching BOLs:', error);
+      Alert.alert('Error', 'Failed to connect to server');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleOptionSelect = (option) => {
+  // Start chat flow with backend
+  const startChatFlow = async () => {
+    if (!selectedBol || chatInProgress) return;
+
+    try {
+      setChatInProgress(true);
+      const response = await fetch(`${API_BASE_URL}/bol/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          bolId: selectedBol._id,
+          updatedFields: [],
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        if (data.completed) {
+          addBotMessage('All BOL fields are up to date! Is there anything else I can help you with?', ['Start new review', 'Exit']);
+        } else {
+          setCurrentField(data.field);
+          setUpdatedFields(data.updatedFields || []);
+          addBotMessage(data.message, data.options);
+        }
+      } else {
+        addBotMessage('Sorry, there was an error starting the chat flow. Please try again.', ['Retry', 'Exit']);
+      }
+    } catch (error) {
+      console.error('Error starting chat flow:', error);
+      addBotMessage('Failed to connect to server. Please check your connection and try again.', ['Retry', 'Exit']);
+    }
+  };
+
+  // Continue chat flow
+  const continueChatFlow = async (userChoice) => {
+    if (!selectedBol || !currentField) return;
+
+    try {
+      let requestBody = {
+        bolId: selectedBol._id,
+        updatedFields: updatedFields,
+      };
+
+      // If user chose to update the field, we need to handle the input
+      if (userChoice === 'YES') {
+        setWaitingForInput(true);
+        addBotMessage(`Please enter the new value for "${currentField}":`, null, true);
+        return;
+      } else if (userChoice === 'NO') {
+        requestBody.change = 'NO';
+      }
+
+      const response = await fetch(`${API_BASE_URL}/bol/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        if (data.completed) {
+          addBotMessage('BOL review completed! All fields have been checked.', ['Start new review', 'Exit']);
+          setChatInProgress(false);
+        } else {
+          setCurrentField(data.field);
+          setUpdatedFields(data.updatedFields || []);
+          addBotMessage(data.message, data.options);
+        }
+      } else {
+        addBotMessage('There was an error processing your request. Please try again.', ['Retry', 'Exit']);
+      }
+    } catch (error) {
+      console.error('Error in chat flow:', error);
+      addBotMessage('Failed to connect to server. Please try again.', ['Retry', 'Exit']);
+    }
+  };
+
+  // Update BOL field
+  const updateBolField = async (fieldValue) => {
+    if (!selectedBol || !currentField || !fieldValue.trim()) return;
+
+    try {
+      // First update the BOL
+      const updateResponse = await fetch(`${API_BASE_URL}/bol/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: selectedBol._id,
+          update: { [currentField]: fieldValue }
+        }),
+      });
+
+      const updateData = await updateResponse.json();
+      
+      if (updateData.success) {
+        // Update local BOL data
+        const updatedBols = bols.map(bol => 
+          bol._id === selectedBol._id 
+            ? { ...bol, [currentField]: fieldValue }
+            : bol
+        );
+        setBols(updatedBols);
+        setSelectedBol(prev => ({ ...prev, [currentField]: fieldValue }));
+
+        addBotMessage(`Great! I've updated "${currentField}" to "${fieldValue}". Let me check the next field.`);
+
+        // Continue with the chat flow
+        const newUpdatedFields = [...updatedFields, currentField];
+        setUpdatedFields(newUpdatedFields);
+
+        // Get next field
+        setTimeout(async () => {
+          const response = await fetch(`${API_BASE_URL}/bol/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              bolId: selectedBol._id,
+              updatedFields: newUpdatedFields,
+            }),
+          });
+
+          const data = await response.json();
+          
+          if (data.success) {
+            if (data.completed) {
+              addBotMessage('BOL review completed! All fields have been checked.', ['Start new review', 'Exit']);
+              setChatInProgress(false);
+            } else {
+              setCurrentField(data.field);
+              addBotMessage(data.message, data.options);
+            }
+          }
+        }, 1000);
+
+      } else {
+        addBotMessage('Failed to update the field. Please try again.', ['Retry', 'Skip']);
+      }
+    } catch (error) {
+      console.error('Error updating BOL:', error);
+      addBotMessage('Failed to update the field due to connection error.', ['Retry', 'Skip']);
+    }
+
+    setWaitingForInput(false);
+    setMessageInput('');
+  };
+
+  // Add bot message to conversation
+  const addBotMessage = (text, options = null, requiresInput = false) => {
+    const botMessage = {
+      id: Date.now(),
+      role: 'bot',
+      text: text,
+      options: options,
+      requiresInput: requiresInput
+    };
+
+    setConversation(prev => [...prev, botMessage]);
+  };
+
+  // Add user message to conversation
+  const addUserMessage = (text) => {
     const userMessage = {
       id: Date.now(),
       role: 'user',
-      text: option
+      text: text
     };
-
-    const nextStep = conversationStep + 1;
-    let nextBotMessage;
-
-    const alternativeResponse = getAlternativeFlow(conversationStep, option);
-    if (alternativeResponse) {
-      nextBotMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: alternativeResponse.text,
-        options: alternativeResponse.options,
-        requiresInput: alternativeResponse.requiresInput
-      };
-    } else if (nextStep < conversationFlow.length) {
-      nextBotMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: conversationFlow[nextStep].text,
-        options: conversationFlow[nextStep].options
-      };
-    }
 
     setConversation(prev => {
       const newConversation = [...prev];
-      if (newConversation.length > 0) {
+      // Remove options from last bot message
+      if (newConversation.length > 0 && newConversation[newConversation.length - 1].role === 'bot') {
         newConversation[newConversation.length - 1] = {
           ...newConversation[newConversation.length - 1],
-          options: null
+          options: null,
+          requiresInput: false
         };
       }
-      
-      newConversation.push(userMessage);
-      
-      if (nextBotMessage && !nextBotMessage.requiresInput) {
-        setTimeout(() => {
-          setConversation(prev => [...prev, nextBotMessage]);
-        }, 1000);
-      } else if (nextBotMessage && nextBotMessage.requiresInput) {
-        setTimeout(() => {
-          setConversation(prev => [...prev, nextBotMessage]);
-        }, 1000);
-      }
-      
-      return newConversation;
+      return [...newConversation, userMessage];
     });
-
-    if (!alternativeResponse || !alternativeResponse.requiresInput) {
-      setConversationStep(nextStep);
-    }
   };
 
-  useEffect(() => {
-    setConversation([]);
-    setConversationStep(0);
-    setWaitingForInput(false);
-    setAwaitingResponse(false);
-    
+  // Handle option selection
+  const handleOptionSelect = (option) => {
+    addUserMessage(option);
+
     setTimeout(() => {
-      const initialMessage = {
-        id: Date.now(),
-        role: 'bot',
-        text: conversationFlow[0].text,
-        options: conversationFlow[0].options
-      };
-      setConversation([initialMessage]);
+      if (option === 'Start new review') {
+        setConversation([]);
+        setUpdatedFields([]);
+        setCurrentField('');
+        setTimeout(() => startChatFlow(), 500);
+      } else if (option === 'Exit') {
+        addBotMessage('Thank you for using BOLy! Have a great day!');
+        setChatInProgress(false);
+      } else if (option === 'Retry') {
+        if (chatInProgress) {
+          continueChatFlow('YES');
+        } else {
+          startChatFlow();
+        }
+      } else if (option === 'Skip') {
+        continueChatFlow('NO');
+      } else {
+        continueChatFlow(option);
+      }
     }, 500);
-  }, [selectedBol, phoneNumber]); // Added phoneNumber as dependency
+  };
+
+  // Handle text input submission
+  const handleTextInput = (inputText) => {
+    if (!inputText.trim()) return;
+
+    addUserMessage(inputText);
+    setTimeout(() => {
+      updateBolField(inputText);
+    }, 500);
+  };
+
+  // Initialize conversation when BOL is selected
+  useEffect(() => {
+    if (selectedBol && !loading) {
+      setConversation([]);
+      setUpdatedFields([]);
+      setCurrentField('');
+      setChatInProgress(false);
+      
+      setTimeout(() => {
+        const welcomeMessage = `Hello! I'm BOLy, your logistics assistant for ${phoneNumber}. I'm here to help you review and update your BOL: ${selectedBol.probarcode || selectedBol._id}. Would you like to start reviewing the BOL fields?`;
+        addBotMessage(welcomeMessage, ['Yes, start review', 'Not now']);
+      }, 500);
+    }
+  }, [selectedBol, phoneNumber, loading]);
+
+  // Fetch BOLs on component mount
+  useEffect(() => {
+    fetchBols();
+  }, [phoneNumber]);
+
+  // Format BOL data for display
+  const formatBolForDisplay = (bol) => {
+    return {
+      id: bol._id,
+      date: bol.date || 'N/A',
+      location: bol.shippercity || bol.consigneecity || 'Unknown',
+      packageName: bol.probarcode || `BOL-${bol._id?.slice(-6)}`,
+      status: 'pending'
+    };
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+          <Text style={styles.loadingText}>Loading BOLs...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -258,34 +347,46 @@ export default function BOLChatInterface({ navigation, route }) {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.bolList}>
-              {bols.map((bol) => (
-                <TouchableOpacity
-                  key={bol.id}
-                  onPress={() => {
-                    setSelectedBol(bol);
-                    setMenuVisible(false);
-                  }}
-                  style={[
-                    styles.bolItem,
-                    selectedBol?.id === bol.id ? styles.selectedBol : styles.unselectedBol
-                  ]}
-                >
-                  <View style={styles.bolHeader}>
-                    <Text style={styles.packageIcon}>📦</Text>
-                    <Text style={[styles.packageName, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      {bol.packageName}
-                    </Text>
-                  </View>
-                  <View style={styles.bolDetails}>
-                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📍 {bol.location}
-                    </Text>
-                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📅 {bol.date}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {bols.map((bol) => {
+                const displayBol = formatBolForDisplay(bol);
+                return (
+                  <TouchableOpacity
+                    key={displayBol.id}
+                    onPress={() => {
+                      setSelectedBol(bol);
+                      setMenuVisible(false);
+                    }}
+                    style={[
+                      styles.bolItem,
+                      selectedBol?._id === bol._id ? styles.selectedBol : styles.unselectedBol
+                    ]}
+                  >
+                    <View style={styles.bolHeader}>
+                      <Text style={styles.packageIcon}>📦</Text>
+                      <Text style={[
+                        styles.packageName, 
+                        selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText
+                      ]}>
+                        {displayBol.packageName}
+                      </Text>
+                    </View>
+                    <View style={styles.bolDetails}>
+                      <Text style={[
+                        styles.bolDetailText, 
+                        selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText
+                      ]}>
+                        📍 {displayBol.location}
+                      </Text>
+                      <Text style={[
+                        styles.bolDetailText, 
+                        selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText
+                      ]}>
+                        📅 {displayBol.date}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         )}
@@ -298,7 +399,9 @@ export default function BOLChatInterface({ navigation, route }) {
               <Text style={styles.menuIcon}>☰</Text>
             </TouchableOpacity>
             <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>BOL: {selectedBol?.packageName}</Text>
+              <Text style={styles.headerTitle}>
+                BOL: {selectedBol ? (selectedBol.probarcode || `BOL-${selectedBol._id?.slice(-6)}`) : 'No BOL Selected'}
+              </Text>
             </View>
           </View>
 
@@ -344,7 +447,7 @@ export default function BOLChatInterface({ navigation, route }) {
                 style={styles.textInput}
                 value={messageInput}
                 onChangeText={setMessageInput}
-                placeholder={`Enter the correct ${inputType}...`}
+                placeholder={`Enter the new value for ${currentField}...`}
                 onSubmitEditing={() => handleTextInput(messageInput)}
                 autoFocus
               />
@@ -362,7 +465,7 @@ export default function BOLChatInterface({ navigation, route }) {
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
-                {conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
+                {conversation.length > 0 ? 'BOLy is ready to help!' : 'Initializing conversation...'}
               </Text>
             </View>
           )}
@@ -379,6 +482,17 @@ const styles = StyleSheet.create({
   },
   keyboardAvoid: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
   },
   sidebar: {
     position: 'absolute',
@@ -476,7 +590,7 @@ const styles = StyleSheet.create({
   },
   chatContent: {
     padding: 16,
-    paddingBottom: 100, // Extra padding at bottom to prevent overlap
+    paddingBottom: 100,
   },
   messageContainer: {
     marginBottom: 16,
@@ -561,7 +675,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -592,7 +706,7 @@ const styles = StyleSheet.create({
   },
   statusBar: {
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     backgroundColor: '#f9fafb',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -602,4 +716,4 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 14,
   },
-}); 
+});
