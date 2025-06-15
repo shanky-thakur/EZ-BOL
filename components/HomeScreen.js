@@ -1,33 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView, 
-  TextInput, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
   StyleSheet,
   SafeAreaView,
   Animated,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
+import Constants from 'expo-constants';
+
+// Get the correct API URL for development
+const getApiUrl = () => {
+  if (__DEV__) {
+    // For Expo development - this gets your computer's IP automatically
+    const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
+    return `http://${debuggerHost}:3000`;
+  }
+  // For production, use your actual API URL
+  return 'https://your-production-api.com';
+};
+
+const API_BASE_URL = getApiUrl();
 
 export default function BOLChatInterface({ navigation, route }) {
   // Get phone number from previous screen (OTP screen)
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
-  
-  const [bols, setBols] = useState([
-    { id: 1, date: '2025-06-10', location: 'Delhi', packageName: 'BOL2024-IND-00045', status: 'pending' },
-    { id: 2, date: '2025-06-09', location: 'Mumbai', packageName: 'BOL2024-IND-00046', status: 'pending' },
-    { id: 3, date: '2025-06-08', location: 'Chennai', packageName: 'BOL2024-IND-00047', status: 'pending' },
-    { id: 4, date: '2025-06-07', location: 'Kolkata', packageName: 'BOL2024-IND-00048', status: 'pending' },
-    { id: 5, date: '2025-06-06', location: 'Hyderabad', packageName: 'BOL2024-IND-00049', status: 'pending' },
-    { id: 6, date: '2025-06-05', location: 'Pune', packageName: 'BOL2024-IND-00050', status: 'pending' },
-    { id: 7, date: '2025-06-04', location: 'Ahmedabad', packageName: 'BOL2024-IND-00051', status: 'pending' },
-    { id: 8, date: '2025-06-03', location: 'Jaipur', packageName: 'BOL2024-IND-00052', status: 'pending' },
-    { id: 9, date: '2025-06-02', location: 'Lucknow', packageName: 'BOL2024-IND-00053', status: 'pending' },
-    { id: 10, date: '2025-06-01', location: 'Bhopal', packageName: 'BOL2024-IND-00054', status: 'pending' },
-  ]);
+
+  const [bols, setBols] = useState([]);
 
   const [selectedBol, setSelectedBol] = useState(bols[0]);
   const [conversationStep, setConversationStep] = useState(0);
@@ -36,13 +39,36 @@ export default function BOLChatInterface({ navigation, route }) {
   const [waitingForInput, setWaitingForInput] = useState(false);
   const [inputType, setInputType] = useState('');
   const [messageInput, setMessageInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
 
   // Log phone number for debugging
   useEffect(() => {
-    console.log('=== BOL CHAT SCREEN ===');
-    console.log('Phone number received:', phoneNumber);
+    const fetchBols = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/bol/get-bols`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phoneNumber }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setBols(data.bols);
+          setSelectedBol(data.bols[0] || null);
+        } else {
+          throw new Error(data.message || 'Fetch failed');
+        }
+      } catch (err) {
+        Alert.alert('Error', err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBols();
   }, [phoneNumber]);
+
 
   // conversation flow logic 
   const conversationFlow = [
@@ -204,9 +230,9 @@ export default function BOLChatInterface({ navigation, route }) {
           options: null
         };
       }
-      
+
       newConversation.push(userMessage);
-      
+
       if (nextBotMessage && !nextBotMessage.requiresInput) {
         setTimeout(() => {
           setConversation(prev => [...prev, nextBotMessage]);
@@ -216,7 +242,7 @@ export default function BOLChatInterface({ navigation, route }) {
           setConversation(prev => [...prev, nextBotMessage]);
         }, 1000);
       }
-      
+
       return newConversation;
     });
 
@@ -230,7 +256,7 @@ export default function BOLChatInterface({ navigation, route }) {
     setConversationStep(0);
     setWaitingForInput(false);
     setAwaitingResponse(false);
-    
+
     setTimeout(() => {
       const initialMessage = {
         id: Date.now(),
@@ -244,7 +270,7 @@ export default function BOLChatInterface({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -260,28 +286,28 @@ export default function BOLChatInterface({ navigation, route }) {
             <ScrollView style={styles.bolList}>
               {bols.map((bol) => (
                 <TouchableOpacity
-                  key={bol.id}
+                  key={bol._id}
                   onPress={() => {
                     setSelectedBol(bol);
                     setMenuVisible(false);
                   }}
                   style={[
                     styles.bolItem,
-                    selectedBol?.id === bol.id ? styles.selectedBol : styles.unselectedBol
+                    selectedBol?._id === bol._id ? styles.selectedBol : styles.unselectedBol
                   ]}
                 >
                   <View style={styles.bolHeader}>
                     <Text style={styles.packageIcon}>📦</Text>
                     <Text style={[styles.packageName, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      {bol.packageName}
+                      {bol.shipper}
                     </Text>
                   </View>
                   <View style={styles.bolDetails}>
                     <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📍 {bol.location}
+                      📍 {bol.shipperCity}
                     </Text>
                     <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📅 {bol.date}
+                      📅 {bol.Dtae}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -298,12 +324,12 @@ export default function BOLChatInterface({ navigation, route }) {
               <Text style={styles.menuIcon}>☰</Text>
             </TouchableOpacity>
             <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>BOL: {selectedBol?.packageName}</Text>
+              <Text style={styles.headerTitle}>BOL: {selectedBol?.proBarcode}</Text>
             </View>
           </View>
 
           {/* Chat Area */}
-          <ScrollView 
+          <ScrollView
             style={styles.chatArea}
             contentContainerStyle={styles.chatContent}
             showsVerticalScrollIndicator={false}
@@ -319,7 +345,7 @@ export default function BOLChatInterface({ navigation, route }) {
                   </View>
                   {msg.role === 'user' && <View style={styles.userAvatar}><Text>👤</Text></View>}
                 </View>
-                
+
                 {msg.role === 'bot' && msg.options && (
                   <View style={styles.optionsContainer}>
                     {msg.options.map((option, index) => (
