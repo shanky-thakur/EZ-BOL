@@ -9,8 +9,7 @@ import {
   SafeAreaView,
   Animated,
   KeyboardAvoidingView,
-  Platform,
-  Alert
+  Platform
 } from 'react-native';
 import Constants from 'expo-constants';
 
@@ -32,6 +31,7 @@ export default function BOLChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
 
   const [bols, setBols] = useState([]);
+
   const [selectedBol, setSelectedBol] = useState(bols[0]);
   const [conversationStep, setConversationStep] = useState(0);
   const [conversation, setConversation] = useState([]);
@@ -41,46 +41,6 @@ export default function BOLChatInterface({ navigation, route }) {
   const [messageInput, setMessageInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
-
-  // Field validation states
-  const [validationMode, setValidationMode] = useState(false);
-  const [currentValidationArray, setCurrentValidationArray] = useState('highly');
-  const [currentFieldsToValidate, setCurrentFieldsToValidate] = useState([]);
-  const [selectedFieldForUpdate, setSelectedFieldForUpdate] = useState('');
-
-  // Field validation arrays
-  const highlyErrorProne = ["shippername", "shipperphone", "consigneename", "consigneephoneno", "classordensity", "units", "weight"];
-  const midErrorProne = ["date", "nmfccode", "hazmat", "kindofpacking", "amount"];
-  const stable = ["probarcode", "shipperstreet", "shippercity", "shippernumber", "consigneestreet", "consigneecity", "customerreferencenumber", "collectcheckbox", "guranteedcheckbox", "lborkgflag", "currencyflag", "shipper", "authorizedsignature"];
-
-  // Field display names mapping
-  const fieldDisplayNames = {
-    "shippername": "Shipper Name",
-    "shipperphone": "Shipper Phone",
-    "consigneename": "Consignee Name",
-    "consigneephoneno": "Consignee Phone",
-    "classordensity": "Class or Density",
-    "units": "Units",
-    "weight": "Weight",
-    "date": "Date",
-    "nmfccode": "NMFC Code",
-    "hazmat": "Hazmat",
-    "kindofpacking": "Kind of Packing",
-    "amount": "Amount",
-    "probarcode": "Pro Barcode",
-    "shipperstreet": "Shipper Street",
-    "shippercity": "Shipper City",
-    "shippernumber": "Shipper Number",
-    "consigneestreet": "Consignee Street",
-    "consigneecity": "Consignee City",
-    "customerreferencenumber": "Customer Reference Number",
-    "collectcheckbox": "Collect Checkbox",
-    "guranteedcheckbox": "Guaranteed Checkbox",
-    "lborkgflag": "LB or KG Flag",
-    "currencyflag": "Currency Flag",
-    "shipper": "Shipper",
-    "authorizedsignature": "Authorized Signature"
-  };
 
   // Log phone number for debugging
   useEffect(() => {
@@ -109,147 +69,13 @@ export default function BOLChatInterface({ navigation, route }) {
     fetchBols();
   }, [phoneNumber]);
 
-  // Initialize validation arrays
-  const initializeValidationArrays = () => {
-    setCurrentFieldsToValidate([...highlyErrorProne]);
-    setCurrentValidationArray('highly');
-    setValidationMode(true);
-  };
 
-  // Get current validation array name for display
-  const getValidationArrayName = () => {
-    switch (currentValidationArray) {
-      case 'highly': return 'Highly Error-Prone Fields';
-      case 'mid': return 'Moderately Error-Prone Fields';
-      case 'stable': return 'Stable Fields';
-      default: return 'Fields';
-    }
-  };
-
-  // Move to next validation array
-  const moveToNextValidationArray = () => {
-    if (currentValidationArray === 'highly') {
-      setCurrentValidationArray('mid');
-      setCurrentFieldsToValidate([...midErrorProne]);
-      return true;
-    } else if (currentValidationArray === 'mid') {
-      setCurrentValidationArray('stable');
-      setCurrentFieldsToValidate([...stable]);
-      return true;
-    } else {
-      // All arrays completed
-      setValidationMode(false);
-      setCurrentFieldsToValidate([]);
-      return false;
-    }
-  };
-
-  // Update BOL field via API
-  const updateBolField = async (fieldName, value) => {
-    try {
-      setAwaitingResponse(true);
-      const updateObject = { [fieldName]: value };
-      
-      const response = await fetch(`${API_BASE_URL}/bol/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedBol._id,
-          update: updateObject
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        // Update local selectedBol
-        setSelectedBol(prev => ({ ...prev, [fieldName]: value }));
-        
-        // Remove field from current validation array
-        setCurrentFieldsToValidate(prev => prev.filter(field => field !== fieldName));
-        
-        // Add success message
-        const successMessage = {
-          id: Date.now(),
-          role: 'bot',
-          text: `✅ Successfully updated ${fieldDisplayNames[fieldName]} to: ${value}`,
-          options: null
-        };
-        
-        setTimeout(() => {
-          setConversation(prev => [...prev, successMessage]);
-          setAwaitingResponse(false);
-          
-          // Continue validation flow
-          setTimeout(() => {
-            continueValidationFlow();
-          }, 1000);
-        }, 500);
-        
-      } else {
-        throw new Error(data.message || 'Update failed');
-      }
-    } catch (error) {
-      setAwaitingResponse(false);
-      const errorMessage = {
-        id: Date.now(),
-        role: 'bot',
-        text: `❌ Failed to update ${fieldDisplayNames[fieldName]}: ${error.message}`,
-        options: ['Continue', 'Try Again']
-      };
-      
-      setTimeout(() => {
-        setConversation(prev => [...prev, errorMessage]);
-      }, 500);
-    }
-  };
-
-  // Continue validation flow after field update
-  const continueValidationFlow = () => {
-    if (currentFieldsToValidate.length === 0) {
-      // Current array is empty, move to next
-      const hasNext = moveToNextValidationArray();
-      if (hasNext) {
-        askForFieldValidation();
-      } else {
-        // All validation completed
-        const completionMessage = {
-          id: Date.now(),
-          role: 'bot',
-          text: '🎉 All field validations completed! Your BOL data has been updated successfully.',
-          options: ['Start New Conversation', 'Exit']
-        };
-        setTimeout(() => {
-          setConversation(prev => [...prev, completionMessage]);
-        }, 500);
-      }
-    } else {
-      // Continue with current array
-      askForFieldValidation();
-    }
-  };
-
-  // Ask user about field validation
-  const askForFieldValidation = () => {
-    const fieldOptions = currentFieldsToValidate.map(field => fieldDisplayNames[field]);
-    const validationMessage = {
-      id: Date.now(),
-      role: 'bot',
-      text: `📋 ${getValidationArrayName()}\n\nDo you want to change any of these fields?`,
-      options: [...fieldOptions, 'No, continue to next section']
-    };
-    
-    setTimeout(() => {
-      setConversation(prev => [...prev, validationMessage]);
-    }, 500);
-  };
-
-  // conversation flow logic (original flow)
+  // conversation flow logic 
   const conversationFlow = [
     {
       type: 'bot',
       text: `Hello! I'm BOLy, your logistics assistant for ${phoneNumber}. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
-      options: ['Yes', 'No', 'Validate BOL Fields']
+      options: ['Yes', 'No']
     },
     {
       type: 'bot',
@@ -269,64 +95,12 @@ export default function BOLChatInterface({ navigation, route }) {
     {
       type: 'bot',
       text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed for ${phoneNumber}. You'll receive a tracking number shortly. Anything else I can help with?`,
-      options: ['No, thank you', 'Yes, I have questions', 'Validate BOL Fields']
+      options: ['No, thank you', 'Yes, I have questions']
     }
   ];
 
-  // Handle field validation input
-  const handleFieldValidationInput = (inputText) => {
-    if (!inputText.trim()) return;
-
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      text: inputText
-    };
-
-    setConversation(prev => [...prev, userMessage]);
-    setWaitingForInput(false);
-    setMessageInput('');
-
-    // Update the field
-    updateBolField(selectedFieldForUpdate, inputText.trim());
-    setSelectedFieldForUpdate('');
-  };
-
-  // Rest of logic (modified to handle validation)
+  // Rest of logic
   const getAlternativeFlow = (step, response) => {
-    // Handle validation mode responses
-    if (validationMode) {
-      if (response === 'No, continue to next section') {
-        const hasNext = moveToNextValidationArray();
-        if (hasNext) {
-          setTimeout(() => askForFieldValidation(), 1000);
-        } else {
-          // All validation completed
-          return {
-            type: 'bot',
-            text: '🎉 All field validations completed! Your BOL data has been updated successfully.',
-            options: ['Start New Conversation', 'Exit']
-          };
-        }
-        return null;
-      } else {
-        // User selected a field to update
-        const fieldKey = Object.keys(fieldDisplayNames).find(key => fieldDisplayNames[key] === response);
-        if (fieldKey) {
-          setSelectedFieldForUpdate(fieldKey);
-          setWaitingForInput(true);
-          setInputType('field_validation');
-          return {
-            type: 'bot',
-            text: `Please enter the new value for ${response}:`,
-            options: null,
-            requiresInput: true
-          };
-        }
-      }
-    }
-
-    // Handle original conversation flow
     switch (step) {
       case 0:
         if (response === 'No') {
@@ -334,14 +108,6 @@ export default function BOLChatInterface({ navigation, route }) {
             type: 'bot',
             text: 'No problem! When would you like to schedule the pickup?',
             options: ['Today', 'Tomorrow', 'Next week']
-          };
-        } else if (response === 'Validate BOL Fields') {
-          initializeValidationArrays();
-          setTimeout(() => askForFieldValidation(), 1000);
-          return {
-            type: 'bot',
-            text: 'Starting BOL field validation process...',
-            options: null
           };
         }
         break;
@@ -369,17 +135,6 @@ export default function BOLChatInterface({ navigation, route }) {
           };
         }
         break;
-      case 4:
-        if (response === 'Validate BOL Fields') {
-          initializeValidationArrays();
-          setTimeout(() => askForFieldValidation(), 1000);
-          return {
-            type: 'bot',
-            text: 'Starting BOL field validation process...',
-            options: null
-          };
-        }
-        break;
       default:
         return conversationFlow[step + 1];
     }
@@ -389,13 +144,6 @@ export default function BOLChatInterface({ navigation, route }) {
   const handleTextInput = (inputText) => {
     if (!inputText.trim()) return;
 
-    // Handle field validation input
-    if (inputType === 'field_validation') {
-      handleFieldValidationInput(inputText);
-      return;
-    }
-
-    // Handle original text inputs
     const userMessage = {
       id: Date.now(),
       role: 'user',
@@ -465,7 +213,7 @@ export default function BOLChatInterface({ navigation, route }) {
         options: alternativeResponse.options,
         requiresInput: alternativeResponse.requiresInput
       };
-    } else if (nextStep < conversationFlow.length && !validationMode) {
+    } else if (nextStep < conversationFlow.length) {
       nextBotMessage = {
         id: Date.now() + 1,
         role: 'bot',
@@ -499,9 +247,7 @@ export default function BOLChatInterface({ navigation, route }) {
     });
 
     if (!alternativeResponse || !alternativeResponse.requiresInput) {
-      if (!validationMode) {
-        setConversationStep(nextStep);
-      }
+      setConversationStep(nextStep);
     }
   };
 
@@ -510,7 +256,6 @@ export default function BOLChatInterface({ navigation, route }) {
     setConversationStep(0);
     setWaitingForInput(false);
     setAwaitingResponse(false);
-    setValidationMode(false);
 
     setTimeout(() => {
       const initialMessage = {
@@ -521,7 +266,7 @@ export default function BOLChatInterface({ navigation, route }) {
       };
       setConversation([initialMessage]);
     }, 500);
-  }, [selectedBol, phoneNumber]);
+  }, [selectedBol, phoneNumber]); // Added phoneNumber as dependency
 
   return (
     <SafeAreaView style={styles.container}>
@@ -553,15 +298,15 @@ export default function BOLChatInterface({ navigation, route }) {
                 >
                   <View style={styles.bolHeader}>
                     <Text style={styles.packageIcon}>📦</Text>
-                    <Text style={[styles.packageName, selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText]}>
+                    <Text style={[styles.packageName, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
                       {bol.shipper}
                     </Text>
                   </View>
                   <View style={styles.bolDetails}>
-                    <Text style={[styles.bolDetailText, selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText]}>
+                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
                       📍 {bol.shipperCity}
                     </Text>
-                    <Text style={[styles.bolDetailText, selectedBol?._id === bol._id ? styles.selectedText : styles.unselectedText]}>
+                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
                       📅 {bol.Dtae}
                     </Text>
                   </View>
@@ -580,11 +325,6 @@ export default function BOLChatInterface({ navigation, route }) {
             </TouchableOpacity>
             <View style={styles.headerInfo}>
               <Text style={styles.headerTitle}>BOL: {selectedBol?.proBarcode}</Text>
-              {validationMode && (
-                <Text style={styles.headerSubtitle}>
-                  Validating: {getValidationArrayName()} ({currentFieldsToValidate.length} remaining)
-                </Text>
-              )}
             </View>
           </View>
 
@@ -621,12 +361,6 @@ export default function BOLChatInterface({ navigation, route }) {
                 )}
               </View>
             ))}
-
-            {awaitingResponse && (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>BOLy is processing...</Text>
-              </View>
-            )}
           </ScrollView>
 
           {/* Input Area */}
@@ -636,11 +370,7 @@ export default function BOLChatInterface({ navigation, route }) {
                 style={styles.textInput}
                 value={messageInput}
                 onChangeText={setMessageInput}
-                placeholder={
-                  inputType === 'field_validation' 
-                    ? `Enter new ${fieldDisplayNames[selectedFieldForUpdate]}...`
-                    : `Enter the correct ${inputType}...`
-                }
+                placeholder={`Enter the correct ${inputType}...`}
                 onSubmitEditing={() => handleTextInput(messageInput)}
                 autoFocus
               />
@@ -658,10 +388,7 @@ export default function BOLChatInterface({ navigation, route }) {
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
-                {validationMode 
-                  ? `Validating ${getValidationArrayName()}`
-                  : conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'
-                }
+                {conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
               </Text>
             </View>
           )}
@@ -770,17 +497,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  headerSubtitle: {
-    color: '#e0e7ff',
-    fontSize: 14,
-    marginTop: 2,
-  },
   chatArea: {
     flex: 1,
   },
   chatContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 100, // Extra padding at bottom to prevent overlap
   },
   messageContainer: {
     marginBottom: 16,
@@ -862,19 +584,10 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontSize: 14,
   },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  loadingText: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -905,7 +618,7 @@ const styles = StyleSheet.create({
   },
   statusBar: {
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
     backgroundColor: '#f9fafb',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -915,4 +628,4 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 14,
   },
-});
+}); 
