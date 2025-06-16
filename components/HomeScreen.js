@@ -7,9 +7,10 @@ import {
   TextInput,
   StyleSheet,
   SafeAreaView,
-  Animated,
+  Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  BackHandler
 } from 'react-native';
 import Constants from 'expo-constants';
 
@@ -26,202 +27,277 @@ const getApiUrl = () => {
 
 const API_BASE_URL = getApiUrl();
 
-export default function BOLChatInterface({ navigation, route }) {
-  // Get phone number from previous screen (OTP screen)
+export default function ChatInterface({ navigation, route }) {
+  // Get phone number and BOL ID from route params
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
+  const bolId = route?.params?.bolId; // BOL ID should be passed from previous screen
 
-  const [bols, setBols] = useState([]);
-
-  const [selectedBol, setSelectedBol] = useState(bols[0]);
-  const [conversationStep, setConversationStep] = useState(0);
   const [conversation, setConversation] = useState([]);
-  const [menuVisible, setMenuVisible] = useState(false);
   const [waitingForInput, setWaitingForInput] = useState(false);
-  const [inputType, setInputType] = useState('');
+  const [currentField, setCurrentField] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
+  
+  // Field arrays
+  const [highlyErrorProne, setHighlyErrorProne] = useState([
+    "shippername", "shipperphone", "consigneename", "consigneephoneno", 
+    "classordensity", "units", "weight"
+  ]);
+  const [midErrorProne, setMidErrorProne] = useState([
+    "date", "nmfccode", "hazmat", "kindofpacking", "amount"
+  ]);
+  const [stable, setStable] = useState([
+    "probarcode", "shipperstreet", "shippercity", "shippernumber", 
+    "consigneestreet", "consigneecity", "customerreferencenumber", 
+    "collectcheckbox", "guranteedcheckbox", "lborkgflag", "currencyflag", 
+    "shipper", "authorizedsignature"
+  ]);
+  
+  const [currentArray, setCurrentArray] = useState('highly'); // 'highly', 'mid', 'stable'
+  const [sessionCompleted, setSessionCompleted] = useState(false);
 
-  // Log phone number for debugging
-  useEffect(() => {
-    const fetchBols = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/bol/get-bols`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: phoneNumber }),
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          setBols(data.bols);
-          setSelectedBol(data.bols[0] || null);
-        } else {
-          throw new Error(data.message || 'Fetch failed');
-        }
-      } catch (err) {
-        Alert.alert('Error', err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchBols();
-  }, [phoneNumber]);
-
-
-  // conversation flow logic 
-  const conversationFlow = [
-    {
-      type: 'bot',
-      text: `Hello! I'm BOLy, your logistics assistant for ${phoneNumber}. Are you ready to pick up ${selectedBol?.packageName} from ${selectedBol?.location}?`,
-      options: ['Yes', 'No']
-    },
-    {
-      type: 'bot',
-      text: 'Great! Before we proceed, please confirm the package details. Is the weight listed as 50 Kgs correct?',
-      options: ['Yes, correct', 'No, needs update']
-    },
-    {
-      type: 'bot',
-      text: 'Perfect! Is the pickup location confirmed as the address on file?',
-      options: ['Yes, confirmed', 'No, address changed']
-    },
-    {
-      type: 'bot',
-      text: 'Excellent! Your pickup is scheduled. Do you need any special handling instructions?',
-      options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
-    },
-    {
-      type: 'bot',
-      text: `All set! Your pickup for ${selectedBol?.packageName} is confirmed for ${phoneNumber}. You'll receive a tracking number shortly. Anything else I can help with?`,
-      options: ['No, thank you', 'Yes, I have questions']
-    }
-  ];
-
-  // Rest of logic
-  const getAlternativeFlow = (step, response) => {
-    switch (step) {
-      case 0:
-        if (response === 'No') {
-          return {
-            type: 'bot',
-            text: 'No problem! When would you like to schedule the pickup?',
-            options: ['Today', 'Tomorrow', 'Next week']
-          };
-        }
-        break;
-      case 1:
-        if (response === 'No, needs update') {
-          setWaitingForInput(true);
-          setInputType('weight');
-          return {
-            type: 'bot',
-            text: 'I understand. Please type the correct weight below and I\'ll update it for you.',
-            options: null,
-            requiresInput: true
-          };
-        }
-        break;
-      case 2:
-        if (response === 'No, address changed') {
-          setWaitingForInput(true);
-          setInputType('address');
-          return {
-            type: 'bot',
-            text: 'Got it! Please type the new pickup address below and I\'ll update it in the system.',
-            options: null,
-            requiresInput: true
-          };
-        }
-        break;
+  // Get current field from current array
+  const getCurrentField = () => {
+    switch (currentArray) {
+      case 'highly':
+        return highlyErrorProne[0];
+      case 'mid':
+        return midErrorProne[0];
+      case 'stable':
+        return stable[0];
       default:
-        return conversationFlow[step + 1];
+        return null;
     }
-    return conversationFlow[step + 1];
   };
 
-  const handleTextInput = (inputText) => {
-    if (!inputText.trim()) return;
+  // Get current array name for display
+  const getCurrentArrayName = () => {
+    switch (currentArray) {
+      case 'highly':
+        return 'Highly Error Prone Fields';
+      case 'mid':
+        return 'Moderately Error Prone Fields';
+      case 'stable':
+        return 'Stable Fields';
+      default:
+        return '';
+    }
+  };
 
+  // Move to next array
+  const moveToNextArray = () => {
+    if (currentArray === 'highly') {
+      setCurrentArray('mid');
+      return true;
+    } else if (currentArray === 'mid') {
+      setCurrentArray('stable');
+      return true;
+    }
+    return false; // No more arrays
+  };
+
+  // Remove field from current array
+  const removeCurrentField = () => {
+    switch (currentArray) {
+      case 'highly':
+        setHighlyErrorProne(prev => prev.slice(1));
+        break;
+      case 'mid':
+        setMidErrorProne(prev => prev.slice(1));
+        break;
+      case 'stable':
+        setStable(prev => prev.slice(1));
+        break;
+    }
+  };
+
+  // Check if current array is empty
+  const isCurrentArrayEmpty = () => {
+    switch (currentArray) {
+      case 'highly':
+        return highlyErrorProne.length === 0;
+      case 'mid':
+        return midErrorProne.length === 0;
+      case 'stable':
+        return stable.length === 0;
+      default:
+        return true;
+    }
+  };
+
+  // API call to update BOL field
+  const updateBOLField = async (field, value) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/bol/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: bolId,
+          update: { [field]: value }
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        return { success: true, message: `Updated ${field} successfully` };
+      } else {
+        throw new Error(data.message || 'Update failed');
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle field update process
+  const handleFieldUpdate = async (value) => {
+    if (!value.trim()) return;
+
+    const field = getCurrentField();
+    
+    // Add user message
     const userMessage = {
       id: Date.now(),
       role: 'user',
-      text: inputText
+      text: value
     };
-
-    let botResponse;
-    switch (inputType) {
-      case 'weight':
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Perfect! I've updated the weight to ${inputText} for ${phoneNumber}. The system has been notified. Now, is the pickup location confirmed as the address on file?`,
-          options: ['Yes, confirmed', 'No, address changed']
-        };
-        break;
-      case 'address':
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Great! I've updated the pickup address to: ${inputText} for ${phoneNumber}. The system has been updated. Now, do you need any special handling instructions?`,
-          options: ['No special requirements', 'Yes, fragile items', 'Yes, temperature sensitive']
-        };
-        break;
-      default:
-        botResponse = {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: `Thank you for the information: ${inputText}. Let me continue with the next step.`,
-          options: ['Continue']
-        };
-    }
-
+    
     setConversation(prev => [...prev, userMessage]);
     setWaitingForInput(false);
-    setInputType('');
     setMessageInput('');
     setAwaitingResponse(true);
 
-    setTimeout(() => {
-      setConversation(prev => [...prev, botResponse]);
-      setAwaitingResponse(false);
-      if (inputType === 'weight') {
-        setConversationStep(2);
-      } else if (inputType === 'address') {
-        setConversationStep(3);
-      }
-    }, 1500);
+    // Call API to update field
+    const result = await updateBOLField(field, value);
+    
+    // Add bot response about update status
+    const updateResponse = {
+      id: Date.now() + 1,
+      role: 'bot',
+      text: result.success ? 
+        `✅ ${result.message}` : 
+        `❌ Failed to update ${field}: ${result.message}`,
+      options: null
+    };
+
+    setConversation(prev => [...prev, updateResponse]);
+
+    if (result.success) {
+      // Remove the updated field from array
+      removeCurrentField();
+      
+      setTimeout(() => {
+        askNextField();
+      }, 1000);
+    } else {
+      // If update failed, ask if they want to try again
+      setTimeout(() => {
+        const retryMessage = {
+          id: Date.now() + 2,
+          role: 'bot',
+          text: `Would you like to try updating "${field}" again?`,
+          options: ['Yes, try again', 'No, skip this field']
+        };
+        setConversation(prev => [...prev, retryMessage]);
+        setAwaitingResponse(false);
+      }, 1000);
+    }
   };
 
+  // Ask about next field
+  const askNextField = () => {
+    // Check if current array is empty
+    if (isCurrentArrayEmpty()) {
+      // Try to move to next array
+      const movedToNext = moveToNextArray();
+      
+      if (!movedToNext) {
+        // All arrays completed
+        const completionMessage = {
+          id: Date.now(),
+          role: 'bot',
+          text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
+          options: ['Start New Session', 'Exit']
+        };
+        setConversation(prev => [...prev, completionMessage]);
+        setSessionCompleted(true);
+        setAwaitingResponse(false);
+        return;
+      } else {
+        // Moved to next array, show transition message
+        const transitionMessage = {
+          id: Date.now(),
+          role: 'bot',
+          text: `Moving to ${getCurrentArrayName()}. Let's continue with the updates.`,
+          options: null
+        };
+        setConversation(prev => [...prev, transitionMessage]);
+        
+        setTimeout(() => {
+          askNextField();
+        }, 1500);
+        return;
+      }
+    }
+
+    // Ask about current field
+    const field = getCurrentField();
+    const fieldMessage = {
+      id: Date.now(),
+      role: 'bot',
+      text: `Do you want to update "${field}"?\n\nCurrently in: ${getCurrentArrayName()}`,
+      options: ['Yes', 'No']
+    };
+    
+    setConversation(prev => [...prev, fieldMessage]);
+    setAwaitingResponse(false);
+  };
+
+  // Handle option selection
   const handleOptionSelect = (option) => {
+    if (sessionCompleted) {
+      if (option === 'Start New Session') {
+        // Reset all states
+        setHighlyErrorProne([
+          "shippername", "shipperphone", "consigneename", "consigneephoneno", 
+          "classordensity", "units", "weight"
+        ]);
+        setMidErrorProne([
+          "date", "nmfccode", "hazmat", "kindofpacking", "amount"
+        ]);
+        setStable([
+          "probarcode", "shipperstreet", "shippercity", "shippernumber", 
+          "consigneestreet", "consigneecity", "customerreferencenumber", 
+          "collectcheckbox", "guranteedcheckbox", "lborkgflag", "currencyflag", 
+          "shipper", "authorizedsignature"
+        ]);
+        setCurrentArray('highly');
+        setSessionCompleted(false);
+        setConversation([]);
+        
+        setTimeout(() => {
+          initializeChat();
+        }, 500);
+        return;
+      } else if (option === 'Exit') {
+        navigation.goBack();
+        return;
+      }
+    }
+
     const userMessage = {
       id: Date.now(),
       role: 'user',
       text: option
     };
 
-    const nextStep = conversationStep + 1;
-    let nextBotMessage;
-
-    const alternativeResponse = getAlternativeFlow(conversationStep, option);
-    if (alternativeResponse) {
-      nextBotMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: alternativeResponse.text,
-        options: alternativeResponse.options,
-        requiresInput: alternativeResponse.requiresInput
-      };
-    } else if (nextStep < conversationFlow.length) {
-      nextBotMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: conversationFlow[nextStep].text,
-        options: conversationFlow[nextStep].options
-      };
-    }
-
+    // Remove options from last bot message
     setConversation(prev => {
       const newConversation = [...prev];
       if (newConversation.length > 0) {
@@ -230,43 +306,122 @@ export default function BOLChatInterface({ navigation, route }) {
           options: null
         };
       }
-
-      newConversation.push(userMessage);
-
-      if (nextBotMessage && !nextBotMessage.requiresInput) {
-        setTimeout(() => {
-          setConversation(prev => [...prev, nextBotMessage]);
-        }, 1000);
-      } else if (nextBotMessage && nextBotMessage.requiresInput) {
-        setTimeout(() => {
-          setConversation(prev => [...prev, nextBotMessage]);
-        }, 1000);
-      }
-
-      return newConversation;
+      return [...newConversation, userMessage];
     });
 
-    if (!alternativeResponse || !alternativeResponse.requiresInput) {
-      setConversationStep(nextStep);
+    setAwaitingResponse(true);
+
+    if (option === 'Yes') {
+      // Show input field for the current field
+      const field = getCurrentField();
+      setCurrentField(field);
+      setWaitingForInput(true);
+      
+      const inputMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: `Please enter the new value for "${field}":`,
+        options: null
+      };
+      
+      setTimeout(() => {
+        setConversation(prev => [...prev, inputMessage]);
+        setAwaitingResponse(false);
+      }, 1000);
+      
+    } else if (option === 'No') {
+      // Skip current field and move to next
+      removeCurrentField();
+      
+      const skipMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: `Skipped "${getCurrentField() || 'field'}". Moving to next field.`,
+        options: null
+      };
+      
+      setTimeout(() => {
+        setConversation(prev => [...prev, skipMessage]);
+        setTimeout(() => {
+          askNextField();
+        }, 1000);
+      }, 1000);
+      
+    } else if (option === 'Yes, try again') {
+      // Try updating the same field again
+      const field = getCurrentField();
+      setCurrentField(field);
+      setWaitingForInput(true);
+      
+      const retryMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: `Please enter the new value for "${field}" again:`,
+        options: null
+      };
+      
+      setTimeout(() => {
+        setConversation(prev => [...prev, retryMessage]);
+        setAwaitingResponse(false);
+      }, 1000);
+      
+    } else if (option === 'No, skip this field') {
+      // Skip the failed field and move to next
+      removeCurrentField();
+      
+      const skipMessage = {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: `Skipped the failed field. Moving to next field.`,
+        options: null
+      };
+      
+      setTimeout(() => {
+        setConversation(prev => [...prev, skipMessage]);
+        setTimeout(() => {
+          askNextField();
+        }, 1000);
+      }, 1000);
     }
   };
 
+  // Initialize chat
+  const initializeChat = () => {
+    const welcomeMessage = {
+      id: Date.now(),
+      role: 'bot',
+      text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nI'll help you update your BOL fields systematically. We'll start with the most error-prone fields first.`,
+      options: null
+    };
+    
+    setConversation([welcomeMessage]);
+    
+    setTimeout(() => {
+      askNextField();
+    }, 2000);
+  };
+
+  // Initialize conversation and handle back button
   useEffect(() => {
-    setConversation([]);
-    setConversationStep(0);
-    setWaitingForInput(false);
-    setAwaitingResponse(false);
+    if (!bolId) {
+      Alert.alert('Error', 'BOL ID is required', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+      return;
+    }
 
     setTimeout(() => {
-      const initialMessage = {
-        id: Date.now(),
-        role: 'bot',
-        text: conversationFlow[0].text,
-        options: conversationFlow[0].options
-      };
-      setConversation([initialMessage]);
+      initializeChat();
     }, 500);
-  }, [selectedBol, phoneNumber]); // Added phoneNumber as dependency
+
+    // Handle hardware back button
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      navigation.goBack();
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [bolId, phoneNumber]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,58 +429,29 @@ export default function BOLChatInterface({ navigation, route }) {
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Sidebar Menu */}
-        {menuVisible && (
-          <View style={styles.sidebar}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Select BOL</Text>
-              <TouchableOpacity onPress={() => setMenuVisible(false)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.bolList}>
-              {bols.map((bol) => (
-                <TouchableOpacity
-                  key={bol._id}
-                  onPress={() => {
-                    setSelectedBol(bol);
-                    setMenuVisible(false);
-                  }}
-                  style={[
-                    styles.bolItem,
-                    selectedBol?._id === bol._id ? styles.selectedBol : styles.unselectedBol
-                  ]}
-                >
-                  <View style={styles.bolHeader}>
-                    <Text style={styles.packageIcon}>📦</Text>
-                    <Text style={[styles.packageName, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      {bol.shipper}
-                    </Text>
-                  </View>
-                  <View style={styles.bolDetails}>
-                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📍 {bol.shipperCity}
-                    </Text>
-                    <Text style={[styles.bolDetailText, selectedBol?.id === bol.id ? styles.selectedText : styles.unselectedText]}>
-                      📅 {bol.Dtae}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
-              <Text style={styles.menuIcon}>☰</Text>
-            </TouchableOpacity>
             <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>BOL: {selectedBol?.proBarcode}</Text>
+              <Text style={styles.headerTitle}>BOL Update Assistant</Text>
+              <Text style={styles.headerSubtitle}>BOLy - Field Update Chat</Text>
             </View>
+          </View>
+
+          {/* Info Bar */}
+          <View style={styles.infoBar}>
+            <Text style={styles.infoText}>
+              📱 {phoneNumber} • 🤖 BOLy Assistant • 📝 BOL: {bolId}
+            </Text>
+          </View>
+
+          {/* Progress Bar */}
+          <View style={styles.progressBar}>
+            <Text style={styles.progressText}>
+              Current: {getCurrentArrayName()} • 
+              Remaining: H:{highlyErrorProne.length} M:{midErrorProne.length} S:{stable.length}
+            </Text>
           </View>
 
           {/* Chat Area */}
@@ -353,6 +479,7 @@ export default function BOLChatInterface({ navigation, route }) {
                         key={index}
                         onPress={() => handleOptionSelect(option)}
                         style={styles.optionButton}
+                        disabled={isLoading}
                       >
                         <Text style={styles.optionText}>{option}</Text>
                       </TouchableOpacity>
@@ -361,6 +488,19 @@ export default function BOLChatInterface({ navigation, route }) {
                 )}
               </View>
             ))}
+
+            {awaitingResponse && (
+              <View style={styles.messageContainer}>
+                <View style={styles.botMessageRow}>
+                  <View style={styles.botAvatar}><Text>🤖</Text></View>
+                  <View style={styles.botMessage}>
+                    <Text style={styles.typingText}>
+                      {isLoading ? 'Updating BOL...' : 'BOLy is typing...'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           {/* Input Area */}
@@ -370,16 +510,19 @@ export default function BOLChatInterface({ navigation, route }) {
                 style={styles.textInput}
                 value={messageInput}
                 onChangeText={setMessageInput}
-                placeholder={`Enter the correct ${inputType}...`}
-                onSubmitEditing={() => handleTextInput(messageInput)}
+                placeholder={`Enter value for ${currentField}...`}
+                onSubmitEditing={() => handleFieldUpdate(messageInput)}
                 autoFocus
+                editable={!isLoading}
               />
               <TouchableOpacity
-                onPress={() => handleTextInput(messageInput)}
-                disabled={!messageInput.trim()}
-                style={[styles.sendButton, !messageInput.trim() && styles.disabledButton]}
+                onPress={() => handleFieldUpdate(messageInput)}
+                disabled={!messageInput.trim() || isLoading}
+                style={[styles.sendButton, (!messageInput.trim() || isLoading) && styles.disabledButton]}
               >
-                <Text style={styles.sendButtonText}>➤</Text>
+                <Text style={styles.sendButtonText}>
+                  {isLoading ? '...' : '➤'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -388,7 +531,8 @@ export default function BOLChatInterface({ navigation, route }) {
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
-                {conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
+                {sessionCompleted ? 'Session completed!' : 
+                 conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
               </Text>
             </View>
           )}
@@ -406,72 +550,6 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
-  sidebar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 320,
-    backgroundColor: '#1f2937',
-    zIndex: 50,
-  },
-  sidebarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  sidebarTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  closeButton: {
-    color: '#9ca3af',
-    fontSize: 18,
-  },
-  bolList: {
-    padding: 16,
-  },
-  bolItem: {
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  selectedBol: {
-    backgroundColor: '#4f46e5',
-  },
-  unselectedBol: {
-    backgroundColor: '#374151',
-  },
-  selectedText: {
-    color: 'white',
-  },
-  unselectedText: {
-    color: '#d1d5db',
-  },
-  bolHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  packageIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  packageName: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  bolDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  bolDetailText: {
-    fontSize: 12,
-  },
   mainContent: {
     flex: 1,
   },
@@ -480,14 +558,7 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  menuButton: {
-    padding: 8,
-    marginRight: 16,
-  },
-  menuIcon: {
-    color: 'white',
-    fontSize: 24,
+    paddingTop: 25
   },
   headerInfo: {
     flex: 1,
@@ -497,12 +568,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  headerSubtitle: {
+    color: '#c7d2fe',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  infoBar: {
+    backgroundColor: 'white',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  progressBar: {
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  progressText: {
+    fontSize: 11,
+    color: '#475569',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   chatArea: {
     flex: 1,
   },
   chatContent: {
     padding: 16,
-    paddingBottom: 100, // Extra padding at bottom to prevent overlap
+    paddingBottom: 100,
   },
   messageContainer: {
     marginBottom: 16,
@@ -538,31 +637,45 @@ const styles = StyleSheet.create({
   userMessage: {
     backgroundColor: '#4f46e5',
     padding: 12,
-    borderRadius: 8,
-    borderBottomRightRadius: 0,
+    borderRadius: 12,
+    borderBottomRightRadius: 4,
     maxWidth: '70%',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   botMessage: {
     backgroundColor: 'white',
     padding: 12,
-    borderRadius: 8,
-    borderBottomLeftRadius: 0,
-    maxWidth: '70%',
+    borderRadius: 12,
+    borderBottomLeftRadius: 4,
+    maxWidth: '75%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   userMessageText: {
     color: 'white',
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: '500',
   },
   botMessageText: {
     color: '#1f2937',
     fontSize: 14,
     lineHeight: 20,
+  },
+  typingText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
   optionsContainer: {
     flexDirection: 'row',
@@ -576,49 +689,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginRight: 8,
     marginBottom: 8,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   optionText: {
     color: '#2563eb',
     fontSize: 14,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginRight: 12,
     fontSize: 16,
+    backgroundColor: '#f9fafb',
+    maxHeight: 100,
   },
   sendButton: {
     backgroundColor: '#4f46e5',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   disabledButton: {
     backgroundColor: '#d1d5db',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sendButtonText: {
     color: 'white',
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '600',
   },
   statusBar: {
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Extra padding for home indicator
+    paddingBottom: Platform.OS === 'ios' ? 34 : 30,
     backgroundColor: '#f9fafb',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -627,5 +761,6 @@ const styles = StyleSheet.create({
   statusText: {
     color: '#6b7280',
     fontSize: 14,
+    fontStyle: 'italic',
   },
-}); 
+});
