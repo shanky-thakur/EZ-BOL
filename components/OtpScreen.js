@@ -138,7 +138,7 @@ export default function OTPScreen({ navigation, route }) {
 
             if (response.ok && data.success) {
                 Alert.alert('Success', 'OTP verified successfully!', [
-                    { text: 'OK', onPress: () => navigation.replace('Home', { phoneNumber: formattedPhone || +919625348422 }) }
+                    { text: 'OK', onPress: () => navigation.replace('BOL', { phoneNumber: formattedPhone || +919625348422 }) }
                 ]);
             } else {
                 console.log('❌ Verification failed');
