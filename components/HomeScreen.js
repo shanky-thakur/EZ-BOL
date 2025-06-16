@@ -39,19 +39,38 @@ export default function ChatInterface({ navigation, route }) {
   const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
   
-  // Field arrays
+  // Fixed field arrays - removed duplicates, keeping original field names
   const [highlyErrorProne, setHighlyErrorProne] = useState([
-    "shipperName", "shipperPhoneNumber", "consigneeName", "consigneePhoneNumber", 
-    "classOrDensity", "Units", "Weight"
+    "shipperName", 
+    "shipperPhoneNumber", 
+    "consigneeName", 
+    "consigneePhoneNumber", 
+    "classOrDensity", 
+    "Units", 
+    "Weight"
   ]);
+  
   const [midErrorProne, setMidErrorProne] = useState([
-    "Dtae", "nmfcCode", "hazmat", "kindOfPacking", "amount"
+    "Dtae", 
+    "nmfcCode", 
+    "hazmat", 
+    "kindOfPacking", 
+    "amount"
   ]);
+  
   const [stable, setStable] = useState([
-    "proBarcode", "shipperStreet", "shipperCity", "shipperNumber", 
-    "consigneeStreet", "consigneeCity", "customerReferenceNumber", 
-    "collectCheckBox", "guranteedCheckBox", "lbOrKgFlag", "currencyFlag", 
-    "shipper", "authorizedSignature"
+    "proBarcode", 
+    "shipperStreet", 
+    "shipperCity", 
+    "shipperNumber", 
+    "consigneeStreet", 
+    "consigneeCity", 
+    "customerReferenceNumber", 
+    "collectCheckBox", 
+    "guranteedCheckBox", 
+    "lbOrKgFlag", 
+    "currencyFlag", 
+    "authorizedSignature"
   ]);
   
   const [currentArray, setCurrentArray] = useState('highly'); // 'highly', 'mid', 'stable'
@@ -61,11 +80,11 @@ export default function ChatInterface({ navigation, route }) {
   const getCurrentField = () => {
     switch (currentArray) {
       case 'highly':
-        return highlyErrorProne[0];
+        return highlyErrorProne[0] || null;
       case 'mid':
-        return midErrorProne[0];
+        return midErrorProne[0] || null;
       case 'stable':
-        return stable[0];
+        return stable[0] || null;
       default:
         return null;
     }
@@ -87,27 +106,47 @@ export default function ChatInterface({ navigation, route }) {
 
   // Move to next array
   const moveToNextArray = () => {
+    console.log(`Moving from ${currentArray} array`);
     if (currentArray === 'highly') {
+      console.log(`Moving to mid array. Mid array length: ${midErrorProne.length}`);
       setCurrentArray('mid');
       return true;
     } else if (currentArray === 'mid') {
+      console.log(`Moving to stable array. Stable array length: ${stable.length}`);
       setCurrentArray('stable');
       return true;
     }
+    console.log('No more arrays to move to');
     return false; // No more arrays
   };
 
   // Remove field from current array
   const removeCurrentField = () => {
+    console.log(`Removing field from ${currentArray} array`);
     switch (currentArray) {
       case 'highly':
-        setHighlyErrorProne(prev => prev.slice(1));
+        console.log(`Highly error prone before removal: ${highlyErrorProne.length}`);
+        setHighlyErrorProne(prev => {
+          const newArray = prev.slice(1);
+          console.log(`Highly error prone after removal: ${newArray.length}`);
+          return newArray;
+        });
         break;
       case 'mid':
-        setMidErrorProne(prev => prev.slice(1));
+        console.log(`Mid error prone before removal: ${midErrorProne.length}`);
+        setMidErrorProne(prev => {
+          const newArray = prev.slice(1);
+          console.log(`Mid error prone after removal: ${newArray.length}`);
+          return newArray;
+        });
         break;
       case 'stable':
-        setStable(prev => prev.slice(1));
+        console.log(`Stable before removal: ${stable.length}`);
+        setStable(prev => {
+          const newArray = prev.slice(1);
+          console.log(`Stable after removal: ${newArray.length}`);
+          return newArray;
+        });
         break;
     }
   };
@@ -124,6 +163,11 @@ export default function ChatInterface({ navigation, route }) {
       default:
         return true;
     }
+  };
+
+  // Check if all arrays are empty
+  const areAllArraysEmpty = () => {
+    return highlyErrorProne.length === 0 && midErrorProne.length === 0 && stable.length === 0;
   };
 
   // API call to update BOL field
@@ -160,6 +204,10 @@ export default function ChatInterface({ navigation, route }) {
     if (!value.trim()) return;
 
     const field = getCurrentField();
+    if (!field) {
+      console.log('No current field available');
+      return;
+    }
     
     // Add user message
     const userMessage = {
@@ -212,12 +260,32 @@ export default function ChatInterface({ navigation, route }) {
 
   // Ask about next field
   const askNextField = () => {
+    console.log(`askNextField called. Current array: ${currentArray}`);
+    console.log(`Array lengths - Highly: ${highlyErrorProne.length}, Mid: ${midErrorProne.length}, Stable: ${stable.length}`);
+    
+    // Check if all arrays are completed
+    if (areAllArraysEmpty()) {
+      console.log('All arrays are empty - session completed');
+      const completionMessage = {
+        id: Date.now(),
+        role: 'bot',
+        text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
+        options: ['Start New Session', 'Exit']
+      };
+      setConversation(prev => [...prev, completionMessage]);
+      setSessionCompleted(true);
+      setAwaitingResponse(false);
+      return;
+    }
+
     // Check if current array is empty
     if (isCurrentArrayEmpty()) {
+      console.log(`Current array ${currentArray} is empty`);
       // Try to move to next array
       const movedToNext = moveToNextArray();
       
       if (!movedToNext) {
+        console.log('Could not move to next array - session completed');
         // All arrays completed
         const completionMessage = {
           id: Date.now(),
@@ -230,6 +298,7 @@ export default function ChatInterface({ navigation, route }) {
         setAwaitingResponse(false);
         return;
       } else {
+        console.log(`Moved to next array: ${currentArray}`);
         // Moved to next array, show transition message
         const transitionMessage = {
           id: Date.now(),
@@ -248,6 +317,12 @@ export default function ChatInterface({ navigation, route }) {
 
     // Ask about current field
     const field = getCurrentField();
+    if (!field) {
+      console.log('No current field available, but array not empty - this should not happen');
+      return;
+    }
+
+    console.log(`Asking about field: ${field}`);
     const fieldMessage = {
       id: Date.now(),
       role: 'bot',
@@ -263,19 +338,36 @@ export default function ChatInterface({ navigation, route }) {
   const handleOptionSelect = (option) => {
     if (sessionCompleted) {
       if (option === 'Start New Session') {
-        // Reset all states
+        // Reset all states with original field arrays
         setHighlyErrorProne([
-          "shippername", "shipperphone", "consigneename", "consigneephoneno", 
-          "classordensity", "units", "weight"
+          "shipperName", 
+          "shipperPhoneNumber", 
+          "consigneeName", 
+          "consigneePhoneNumber", 
+          "classOrDensity", 
+          "Units", 
+          "Weight"
         ]);
         setMidErrorProne([
-          "date", "nmfccode", "hazmat", "kindofpacking", "amount"
+          "Dtae", 
+          "nmfcCode", 
+          "hazmat", 
+          "kindOfPacking", 
+          "amount"
         ]);
         setStable([
-          "probarcode", "shipperstreet", "shippercity", "shippernumber", 
-          "consigneestreet", "consigneecity", "customerreferencenumber", 
-          "collectcheckbox", "guranteedcheckbox", "lborkgflag", "currencyflag", 
-          "shipper", "authorizedsignature"
+          "proBarcode", 
+          "shipperStreet", 
+          "shipperCity", 
+          "shipperNumber", 
+          "consigneeStreet", 
+          "consigneeCity", 
+          "customerReferenceNumber", 
+          "collectCheckBox", 
+          "guranteedCheckBox", 
+          "lbOrKgFlag", 
+          "currencyFlag", 
+          "authorizedSignature"
         ]);
         setCurrentArray('highly');
         setSessionCompleted(false);
@@ -314,6 +406,11 @@ export default function ChatInterface({ navigation, route }) {
     if (option === 'Yes') {
       // Show input field for the current field
       const field = getCurrentField();
+      if (!field) {
+        console.log('No field available for input');
+        return;
+      }
+      
       setCurrentField(field);
       setWaitingForInput(true);
       
@@ -331,12 +428,13 @@ export default function ChatInterface({ navigation, route }) {
       
     } else if (option === 'No') {
       // Skip current field and move to next
+      const currentFieldName = getCurrentField();
       removeCurrentField();
       
       const skipMessage = {
         id: Date.now() + 1,
         role: 'bot',
-        text: `Skipped "${getCurrentField() || 'field'}". Moving to next field.`,
+        text: `Skipped "${currentFieldName}". Moving to next field.`,
         options: null
       };
       
@@ -350,6 +448,11 @@ export default function ChatInterface({ navigation, route }) {
     } else if (option === 'Yes, try again') {
       // Try updating the same field again
       const field = getCurrentField();
+      if (!field) {
+        console.log('No field available for retry');
+        return;
+      }
+      
       setCurrentField(field);
       setWaitingForInput(true);
       
@@ -367,12 +470,13 @@ export default function ChatInterface({ navigation, route }) {
       
     } else if (option === 'No, skip this field') {
       // Skip the failed field and move to next
+      const currentFieldName = getCurrentField();
       removeCurrentField();
       
       const skipMessage = {
         id: Date.now() + 1,
         role: 'bot',
-        text: `Skipped the failed field. Moving to next field.`,
+        text: `Skipped the failed field "${currentFieldName}". Moving to next field.`,
         options: null
       };
       
