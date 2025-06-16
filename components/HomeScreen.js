@@ -41,17 +41,17 @@ export default function ChatInterface({ navigation, route }) {
   
   // Field arrays
   const [highlyErrorProne, setHighlyErrorProne] = useState([
-    "shippername", "shipperphone", "consigneename", "consigneephoneno", 
-    "classordensity", "units", "weight"
+    "shipperName", "shipperPhoneNumber", "consigneeName", "consigneePhoneNumber", 
+    "classOrDensity", "Units", "Weight"
   ]);
   const [midErrorProne, setMidErrorProne] = useState([
-    "date", "nmfccode", "hazmat", "kindofpacking", "amount"
+    "Dtae", "nmfcCode", "hazmat", "kindOfPacking", "amount"
   ]);
   const [stable, setStable] = useState([
-    "probarcode", "shipperstreet", "shippercity", "shippernumber", 
-    "consigneestreet", "consigneecity", "customerreferencenumber", 
-    "collectcheckbox", "guranteedcheckbox", "lborkgflag", "currencyflag", 
-    "shipper", "authorizedsignature"
+    "proBarcode", "shipperStreet", "shipperCity", "shipperNumber", 
+    "consigneeStreet", "consigneeCity", "customerReferenceNumber", 
+    "collectCheckBox", "guranteedCheckBox", "lbOrKgFlag", "currencyFlag", 
+    "shipper", "authorizedSignature"
   ]);
   
   const [currentArray, setCurrentArray] = useState('highly'); // 'highly', 'mid', 'stable'
