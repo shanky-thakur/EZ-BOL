@@ -29,7 +29,6 @@ export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
   const bolId = route?.params?.bolId;
 
-  // --- UseRef to persist conversation across re-renders ---
   const conversationRef = useRef([]);
   const [conversation, setConversation] = useState([]);
   const [waitingForInput, setWaitingForInput] = useState(false);
@@ -47,7 +46,6 @@ export default function ChatInterface({ navigation, route }) {
     "Units",
     "Weight"
   ]);
-
   const [midErrorProne, setMidErrorProne] = useState([
     "Dtae",
     "nmfcCode",
@@ -55,7 +53,6 @@ export default function ChatInterface({ navigation, route }) {
     "kindOfPacking",
     "amount"
   ]);
-
   const [stable, setStable] = useState([
     "proBarcode",
     "shipperStreet",
@@ -70,13 +67,12 @@ export default function ChatInterface({ navigation, route }) {
     "currencyFlag",
     "authorizedSignature"
   ]);
-
   const [currentArray, setCurrentArray] = useState('highly');
   const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [welcomeShown, setWelcomeShown] = useState(false);
 
   const scrollViewRef = useRef(null);
 
-  // --- Always update both ref and state ---
   const appendMessage = useCallback((msg) => {
     conversationRef.current = [...conversationRef.current, msg];
     setConversation([...conversationRef.current]);
@@ -171,8 +167,8 @@ export default function ChatInterface({ navigation, route }) {
       ) return;
       askNextField();
     }
-    // eslint-disable-next-line
-  }, [highlyErrorProne, midErrorProne, stable]);
+    // The critical fix: include currentArray in dependencies!
+  }, [highlyErrorProne, midErrorProne, stable, currentArray, sessionCompleted, awaitingResponse, waitingForInput, askNextField]);
 
   const askNextField = useCallback(() => {
     const currentArrays = {
@@ -199,23 +195,13 @@ export default function ChatInterface({ navigation, route }) {
       if (nextArray) {
         setCurrentArray(nextArray);
         const nextArrayName = nextArray === 'mid' ? 'Moderately Error Prone Fields' : 'Stable Fields';
-        const nextArrayData = getArrayByName(nextArray);
-        const nextField = nextArrayData[0];
         appendMessage({
           id: uuid.v4(),
           role: 'bot',
           text: `Moving to ${nextArrayName}. Let's continue with the updates.`,
           options: null
         });
-        setTimeout(() => {
-          appendMessage({
-            id: uuid.v4(),
-            role: 'bot',
-            text: `Do you want to update "${nextField}"?\n\nCurrently in: ${nextArrayName}`,
-            options: ['Yes', 'No']
-          });
-          setAwaitingResponse(false);
-        }, 1200);
+        // Do NOT prompt for the next field here; let useEffect handle it!
         return;
       } else {
         appendMessage({
@@ -238,7 +224,6 @@ export default function ChatInterface({ navigation, route }) {
     setAwaitingResponse(false);
   }, [currentArray, highlyErrorProne, midErrorProne, stable, areAllArraysEmpty, getArrayByName, getCurrentArrayName, findNextAvailableArray, appendMessage]);
 
-  // --- Always append, never reset conversation except on session reset ---
   const handleFieldUpdate = async (value) => {
     if (!value.trim()) return;
     const field = getCurrentField();
@@ -271,6 +256,7 @@ export default function ChatInterface({ navigation, route }) {
         setHighlyErrorProne(updatedArrays.highly);
         setMidErrorProne(updatedArrays.mid);
         setStable(updatedArrays.stable);
+        setAwaitingResponse(false);
       }, 1000);
     } else {
       setTimeout(() => {
@@ -322,6 +308,7 @@ export default function ChatInterface({ navigation, route }) {
         setSessionCompleted(false);
         conversationRef.current = [];
         setConversation([]);
+        setWelcomeShown(false);
         setTimeout(() => {
           initializeChat();
         }, 500);
@@ -369,6 +356,7 @@ export default function ChatInterface({ navigation, route }) {
           text: `Skipped "${currentFieldName}". Moving to next field.`,
           options: null
         });
+        setAwaitingResponse(false);
       }, 600);
     } else if (option === 'Yes, try again') {
       const field = getCurrentField();
@@ -402,11 +390,14 @@ export default function ChatInterface({ navigation, route }) {
           text: `Skipped the failed field "${currentFieldName}". Moving to next field.`,
           options: null
         });
+        setAwaitingResponse(false);
       }, 600);
     }
   };
 
   const initializeChat = useCallback(() => {
+    if (welcomeShown) return;
+    setWelcomeShown(true);
     appendMessage({
       id: uuid.v4(),
       role: 'bot',
@@ -415,8 +406,8 @@ export default function ChatInterface({ navigation, route }) {
     });
     setTimeout(() => {
       askNextField();
-    }, 1200);
-  }, [phoneNumber, askNextField, appendMessage]);
+    }, 500);
+  }, [phoneNumber, askNextField, appendMessage, welcomeShown]);
 
   useEffect(() => {
     if (!bolId) {
@@ -425,15 +416,14 @@ export default function ChatInterface({ navigation, route }) {
       ]);
       return;
     }
-    setTimeout(() => {
-      initializeChat();
-    }, 400);
+    initializeChat();
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       navigation.goBack();
       return true;
     });
     return () => backHandler.remove();
-  }, [bolId, phoneNumber, initializeChat]);
+    // eslint-disable-next-line
+  }, []); // Only run on mount
 
   return (
     <SafeAreaView style={styles.container}>
