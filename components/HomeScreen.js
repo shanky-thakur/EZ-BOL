@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,180 +13,143 @@ import {
   BackHandler
 } from 'react-native';
 import Constants from 'expo-constants';
+import uuid from 'react-native-uuid';
 
-// Get the correct API URL for development
 const getApiUrl = () => {
   if (__DEV__) {
-    // For Expo development - this gets your computer's IP automatically
     const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
     return `http://${debuggerHost}:3000`;
   }
-  // For production, use your actual API URL
   return 'https://your-production-api.com';
 };
 
 const API_BASE_URL = getApiUrl();
 
 export default function ChatInterface({ navigation, route }) {
-  // Get phone number and BOL ID from route params
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
-  const bolId = route?.params?.bolId; // BOL ID should be passed from previous screen
+  const bolId = route?.params?.bolId;
 
+  // --- UseRef to persist conversation across re-renders ---
+  const conversationRef = useRef([]);
   const [conversation, setConversation] = useState([]);
   const [waitingForInput, setWaitingForInput] = useState(false);
   const [currentField, setCurrentField] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
-  
-  // Fixed field arrays - removed duplicates, keeping original field names
+
   const [highlyErrorProne, setHighlyErrorProne] = useState([
-    "shipperName", 
-    "shipperPhoneNumber", 
-    "consigneeName", 
-    "consigneePhoneNumber", 
-    "classOrDensity", 
-    "Units", 
+    "shipperName",
+    "shipperPhoneNumber",
+    "consigneeName",
+    "consigneePhoneNumber",
+    "classOrDensity",
+    "Units",
     "Weight"
   ]);
-  
+
   const [midErrorProne, setMidErrorProne] = useState([
-    "Dtae", 
-    "nmfcCode", 
-    "hazmat", 
-    "kindOfPacking", 
+    "Dtae",
+    "nmfcCode",
+    "hazmat",
+    "kindOfPacking",
     "amount"
   ]);
-  
+
   const [stable, setStable] = useState([
-    "proBarcode", 
-    "shipperStreet", 
-    "shipperCity", 
-    "shipperNumber", 
-    "consigneeStreet", 
-    "consigneeCity", 
-    "customerReferenceNumber", 
-    "collectCheckBox", 
-    "guranteedCheckBox", 
-    "lbOrKgFlag", 
-    "currencyFlag", 
+    "proBarcode",
+    "shipperStreet",
+    "shipperCity",
+    "shipperNumber",
+    "consigneeStreet",
+    "consigneeCity",
+    "customerReferenceNumber",
+    "collectCheckBox",
+    "guranteedCheckBox",
+    "lbOrKgFlag",
+    "currencyFlag",
     "authorizedSignature"
   ]);
-  
-  const [currentArray, setCurrentArray] = useState('highly'); // 'highly', 'mid', 'stable'
+
+  const [currentArray, setCurrentArray] = useState('highly');
   const [sessionCompleted, setSessionCompleted] = useState(false);
 
-  // Get current field from current array
-  const getCurrentField = () => {
-    switch (currentArray) {
-      case 'highly':
-        return highlyErrorProne[0] || null;
-      case 'mid':
-        return midErrorProne[0] || null;
-      case 'stable':
-        return stable[0] || null;
-      default:
-        return null;
-    }
-  };
+  const scrollViewRef = useRef(null);
 
-  // Get current array name for display
-  const getCurrentArrayName = () => {
-    switch (currentArray) {
-      case 'highly':
-        return 'Highly Error Prone Fields';
-      case 'mid':
-        return 'Moderately Error Prone Fields';
-      case 'stable':
-        return 'Stable Fields';
-      default:
-        return '';
-    }
-  };
+  // --- Always update both ref and state ---
+  const appendMessage = useCallback((msg) => {
+    conversationRef.current = [...conversationRef.current, msg];
+    setConversation([...conversationRef.current]);
+  }, []);
 
-  // Move to next array
-  const moveToNextArray = () => {
-    console.log(`Moving from ${currentArray} array`);
-    if (currentArray === 'highly') {
-      console.log(`Moving to mid array. Mid array length: ${midErrorProne.length}`);
-      setCurrentArray('mid');
-      return true;
-    } else if (currentArray === 'mid') {
-      console.log(`Moving to stable array. Stable array length: ${stable.length}`);
-      setCurrentArray('stable');
-      return true;
+  const getArrayByName = useCallback((arrayName) => {
+    switch (arrayName) {
+      case 'highly': return highlyErrorProne;
+      case 'mid': return midErrorProne;
+      case 'stable': return stable;
+      default: return [];
     }
-    console.log('No more arrays to move to');
-    return false; // No more arrays
-  };
+  }, [highlyErrorProne, midErrorProne, stable]);
 
-  // Remove field from current array
-  const removeCurrentField = () => {
-    console.log(`Removing field from ${currentArray} array`);
+  const getCurrentField = useCallback(() => {
+    const currentArrayData = getArrayByName(currentArray);
+    return currentArrayData[0] || null;
+  }, [currentArray, getArrayByName]);
+
+  const getCurrentArrayName = useCallback(() => {
     switch (currentArray) {
+      case 'highly': return 'Highly Error Prone Fields';
+      case 'mid': return 'Moderately Error Prone Fields';
+      case 'stable': return 'Stable Fields';
+      default: return '';
+    }
+  }, [currentArray]);
+
+  const findNextAvailableArray = useCallback(() => {
+    if (currentArray === 'highly' && midErrorProne.length > 0) {
+      return 'mid';
+    } else if ((currentArray === 'highly' || currentArray === 'mid') && stable.length > 0) {
+      return 'stable';
+    }
+    return null;
+  }, [currentArray, midErrorProne.length, stable.length]);
+
+  const removeCurrentFieldFromArray = useCallback((currentArrayName, arrays) => {
+    const updatedArrays = { ...arrays };
+    switch (currentArrayName) {
       case 'highly':
-        console.log(`Highly error prone before removal: ${highlyErrorProne.length}`);
-        setHighlyErrorProne(prev => {
-          const newArray = prev.slice(1);
-          console.log(`Highly error prone after removal: ${newArray.length}`);
-          return newArray;
-        });
+        updatedArrays.highly = arrays.highly.slice(1);
         break;
       case 'mid':
-        console.log(`Mid error prone before removal: ${midErrorProne.length}`);
-        setMidErrorProne(prev => {
-          const newArray = prev.slice(1);
-          console.log(`Mid error prone after removal: ${newArray.length}`);
-          return newArray;
-        });
+        updatedArrays.mid = arrays.mid.slice(1);
         break;
       case 'stable':
-        console.log(`Stable before removal: ${stable.length}`);
-        setStable(prev => {
-          const newArray = prev.slice(1);
-          console.log(`Stable after removal: ${newArray.length}`);
-          return newArray;
-        });
+        updatedArrays.stable = arrays.stable.slice(1);
         break;
     }
-  };
+    return updatedArrays;
+  }, []);
 
-  // Check if current array is empty
-  const isCurrentArrayEmpty = () => {
-    switch (currentArray) {
-      case 'highly':
-        return highlyErrorProne.length === 0;
-      case 'mid':
-        return midErrorProne.length === 0;
-      case 'stable':
-        return stable.length === 0;
-      default:
-        return true;
-    }
-  };
+  const areAllArraysEmpty = useCallback((arrays = null) => {
+    const currentArrays = arrays || {
+      highly: highlyErrorProne,
+      mid: midErrorProne,
+      stable: stable
+    };
+    return currentArrays.highly.length === 0 &&
+           currentArrays.mid.length === 0 &&
+           currentArrays.stable.length === 0;
+  }, [highlyErrorProne, midErrorProne, stable]);
 
-  // Check if all arrays are empty
-  const areAllArraysEmpty = () => {
-    return highlyErrorProne.length === 0 && midErrorProne.length === 0 && stable.length === 0;
-  };
-
-  // API call to update BOL field
   const updateBOLField = async (field, value) => {
     try {
       setIsLoading(true);
       const response = await fetch(`${API_BASE_URL}/bol/update`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: bolId,
-          update: { [field]: value }
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: bolId, update: { [field]: value } }),
       });
-
       const data = await response.json();
-      
       if (data.success) {
         return { success: true, message: `Updated ${field} successfully` };
       } else {
@@ -199,180 +162,166 @@ export default function ChatInterface({ navigation, route }) {
     }
   };
 
-  // Handle field update process
-  const handleFieldUpdate = async (value) => {
-    if (!value.trim()) return;
-
-    const field = getCurrentField();
-    if (!field) {
-      console.log('No current field available');
-      return;
+  useEffect(() => {
+    if (!sessionCompleted && !awaitingResponse && !waitingForInput) {
+      if (
+        highlyErrorProne.length === 0 &&
+        midErrorProne.length === 0 &&
+        stable.length === 0
+      ) return;
+      askNextField();
     }
-    
-    // Add user message
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      text: value
+    // eslint-disable-next-line
+  }, [highlyErrorProne, midErrorProne, stable]);
+
+  const askNextField = useCallback(() => {
+    const currentArrays = {
+      highly: highlyErrorProne,
+      mid: midErrorProne,
+      stable: stable
     };
-    
-    setConversation(prev => [...prev, userMessage]);
-    setWaitingForInput(false);
-    setMessageInput('');
-    setAwaitingResponse(true);
-
-    // Call API to update field
-    const result = await updateBOLField(field, value);
-    
-    // Add bot response about update status
-    const updateResponse = {
-      id: Date.now() + 1,
-      role: 'bot',
-      text: result.success ? 
-        `✅ ${result.message}` : 
-        `❌ Failed to update ${field}: ${result.message}`,
-      options: null
-    };
-
-    setConversation(prev => [...prev, updateResponse]);
-
-    if (result.success) {
-      // Remove the updated field from array
-      removeCurrentField();
-      
-      setTimeout(() => {
-        askNextField();
-      }, 1000);
-    } else {
-      // If update failed, ask if they want to try again
-      setTimeout(() => {
-        const retryMessage = {
-          id: Date.now() + 2,
-          role: 'bot',
-          text: `Would you like to try updating "${field}" again?`,
-          options: ['Yes, try again', 'No, skip this field']
-        };
-        setConversation(prev => [...prev, retryMessage]);
-        setAwaitingResponse(false);
-      }, 1000);
-    }
-  };
-
-  // Ask about next field
-  const askNextField = () => {
-    console.log(`askNextField called. Current array: ${currentArray}`);
-    console.log(`Array lengths - Highly: ${highlyErrorProne.length}, Mid: ${midErrorProne.length}, Stable: ${stable.length}`);
-    
-    // Check if all arrays are completed
-    if (areAllArraysEmpty()) {
-      console.log('All arrays are empty - session completed');
-      const completionMessage = {
-        id: Date.now(),
+    if (areAllArraysEmpty(currentArrays)) {
+      appendMessage({
+        id: uuid.v4(),
         role: 'bot',
         text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
         options: ['Start New Session', 'Exit']
-      };
-      setConversation(prev => [...prev, completionMessage]);
+      });
       setSessionCompleted(true);
       setAwaitingResponse(false);
       return;
     }
-
-    // Check if current array is empty
-    if (isCurrentArrayEmpty()) {
-      console.log(`Current array ${currentArray} is empty`);
-      // Try to move to next array
-      const movedToNext = moveToNextArray();
-      
-      if (!movedToNext) {
-        console.log('Could not move to next array - session completed');
-        // All arrays completed
-        const completionMessage = {
-          id: Date.now(),
+    const currentArrayData = getArrayByName(currentArray);
+    let field = currentArrayData[0] || null;
+    let arrayName = getCurrentArrayName();
+    if (!field) {
+      const nextArray = findNextAvailableArray();
+      if (nextArray) {
+        setCurrentArray(nextArray);
+        const nextArrayName = nextArray === 'mid' ? 'Moderately Error Prone Fields' : 'Stable Fields';
+        const nextArrayData = getArrayByName(nextArray);
+        const nextField = nextArrayData[0];
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Moving to ${nextArrayName}. Let's continue with the updates.`,
+          options: null
+        });
+        setTimeout(() => {
+          appendMessage({
+            id: uuid.v4(),
+            role: 'bot',
+            text: `Do you want to update "${nextField}"?\n\nCurrently in: ${nextArrayName}`,
+            options: ['Yes', 'No']
+          });
+          setAwaitingResponse(false);
+        }, 1200);
+        return;
+      } else {
+        appendMessage({
+          id: uuid.v4(),
           role: 'bot',
           text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
           options: ['Start New Session', 'Exit']
-        };
-        setConversation(prev => [...prev, completionMessage]);
+        });
         setSessionCompleted(true);
         setAwaitingResponse(false);
         return;
-      } else {
-        console.log(`Moved to next array: ${currentArray}`);
-        // Moved to next array, show transition message
-        const transitionMessage = {
-          id: Date.now(),
-          role: 'bot',
-          text: `Moving to ${getCurrentArrayName()}. Let's continue with the updates.`,
-          options: null
-        };
-        setConversation(prev => [...prev, transitionMessage]);
-        
-        setTimeout(() => {
-          askNextField();
-        }, 1500);
-        return;
       }
     }
-
-    // Ask about current field
-    const field = getCurrentField();
-    if (!field) {
-      console.log('No current field available, but array not empty - this should not happen');
-      return;
-    }
-
-    console.log(`Asking about field: ${field}`);
-    const fieldMessage = {
-      id: Date.now(),
+    appendMessage({
+      id: uuid.v4(),
       role: 'bot',
-      text: `Do you want to update "${field}"?\n\nCurrently in: ${getCurrentArrayName()}`,
+      text: `Do you want to update "${field}"?\n\nCurrently in: ${arrayName}`,
       options: ['Yes', 'No']
-    };
-    
-    setConversation(prev => [...prev, fieldMessage]);
+    });
     setAwaitingResponse(false);
+  }, [currentArray, highlyErrorProne, midErrorProne, stable, areAllArraysEmpty, getArrayByName, getCurrentArrayName, findNextAvailableArray, appendMessage]);
+
+  // --- Always append, never reset conversation except on session reset ---
+  const handleFieldUpdate = async (value) => {
+    if (!value.trim()) return;
+    const field = getCurrentField();
+    if (!field) return;
+    appendMessage({
+      id: uuid.v4(),
+      role: 'user',
+      text: value
+    });
+    setWaitingForInput(false);
+    setMessageInput('');
+    setAwaitingResponse(true);
+    const result = await updateBOLField(field, value);
+    appendMessage({
+      id: uuid.v4(),
+      role: 'bot',
+      text: result.success ?
+        `✅ ${result.message}` :
+        `❌ Failed to update ${field}: ${result.message}`,
+      options: null
+    });
+    if (result.success) {
+      setTimeout(() => {
+        const currentArrays = {
+          highly: highlyErrorProne,
+          mid: midErrorProne,
+          stable: stable
+        };
+        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
+        setHighlyErrorProne(updatedArrays.highly);
+        setMidErrorProne(updatedArrays.mid);
+        setStable(updatedArrays.stable);
+      }, 1000);
+    } else {
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Would you like to try updating "${field}" again?`,
+          options: ['Yes, try again', 'No, skip this field']
+        });
+        setAwaitingResponse(false);
+      }, 1000);
+    }
   };
 
-  // Handle option selection
   const handleOptionSelect = (option) => {
     if (sessionCompleted) {
       if (option === 'Start New Session') {
-        // Reset all states with original field arrays
         setHighlyErrorProne([
-          "shipperName", 
-          "shipperPhoneNumber", 
-          "consigneeName", 
-          "consigneePhoneNumber", 
-          "classOrDensity", 
-          "Units", 
+          "shipperName",
+          "shipperPhoneNumber",
+          "consigneeName",
+          "consigneePhoneNumber",
+          "classOrDensity",
+          "Units",
           "Weight"
         ]);
         setMidErrorProne([
-          "Dtae", 
-          "nmfcCode", 
-          "hazmat", 
-          "kindOfPacking", 
+          "Dtae",
+          "nmfcCode",
+          "hazmat",
+          "kindOfPacking",
           "amount"
         ]);
         setStable([
-          "proBarcode", 
-          "shipperStreet", 
-          "shipperCity", 
-          "shipperNumber", 
-          "consigneeStreet", 
-          "consigneeCity", 
-          "customerReferenceNumber", 
-          "collectCheckBox", 
-          "guranteedCheckBox", 
-          "lbOrKgFlag", 
-          "currencyFlag", 
+          "proBarcode",
+          "shipperStreet",
+          "shipperCity",
+          "shipperNumber",
+          "consigneeStreet",
+          "consigneeCity",
+          "customerReferenceNumber",
+          "collectCheckBox",
+          "guranteedCheckBox",
+          "lbOrKgFlag",
+          "currencyFlag",
           "authorizedSignature"
         ]);
         setCurrentArray('highly');
         setSessionCompleted(false);
+        conversationRef.current = [];
         setConversation([]);
-        
         setTimeout(() => {
           initializeChat();
         }, 500);
@@ -382,130 +331,93 @@ export default function ChatInterface({ navigation, route }) {
         return;
       }
     }
-
-    const userMessage = {
-      id: Date.now(),
+    appendMessage({
+      id: uuid.v4(),
       role: 'user',
       text: option
-    };
-
-    // Remove options from last bot message
-    setConversation(prev => {
-      const newConversation = [...prev];
-      if (newConversation.length > 0) {
-        newConversation[newConversation.length - 1] = {
-          ...newConversation[newConversation.length - 1],
-          options: null
-        };
-      }
-      return [...newConversation, userMessage];
     });
-
     setAwaitingResponse(true);
-
     if (option === 'Yes') {
-      // Show input field for the current field
       const field = getCurrentField();
-      if (!field) {
-        console.log('No field available for input');
-        return;
-      }
-      
+      if (!field) return;
       setCurrentField(field);
       setWaitingForInput(true);
-      
-      const inputMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: `Please enter the new value for "${field}":`,
-        options: null
-      };
-      
       setTimeout(() => {
-        setConversation(prev => [...prev, inputMessage]);
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Please enter the new value for "${field}":`,
+          options: null
+        });
         setAwaitingResponse(false);
-      }, 1000);
-      
+      }, 600);
     } else if (option === 'No') {
-      // Skip current field and move to next
       const currentFieldName = getCurrentField();
-      removeCurrentField();
-      
-      const skipMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: `Skipped "${currentFieldName}". Moving to next field.`,
-        options: null
-      };
-      
       setTimeout(() => {
-        setConversation(prev => [...prev, skipMessage]);
-        setTimeout(() => {
-          askNextField();
-        }, 1000);
-      }, 1000);
-      
+        const currentArrays = {
+          highly: highlyErrorProne,
+          mid: midErrorProne,
+          stable: stable
+        };
+        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
+        setHighlyErrorProne(updatedArrays.highly);
+        setMidErrorProne(updatedArrays.mid);
+        setStable(updatedArrays.stable);
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Skipped "${currentFieldName}". Moving to next field.`,
+          options: null
+        });
+      }, 600);
     } else if (option === 'Yes, try again') {
-      // Try updating the same field again
       const field = getCurrentField();
-      if (!field) {
-        console.log('No field available for retry');
-        return;
-      }
-      
+      if (!field) return;
       setCurrentField(field);
       setWaitingForInput(true);
-      
-      const retryMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: `Please enter the new value for "${field}" again:`,
-        options: null
-      };
-      
       setTimeout(() => {
-        setConversation(prev => [...prev, retryMessage]);
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Please enter the new value for "${field}" again:`,
+          options: null
+        });
         setAwaitingResponse(false);
-      }, 1000);
-      
+      }, 600);
     } else if (option === 'No, skip this field') {
-      // Skip the failed field and move to next
       const currentFieldName = getCurrentField();
-      removeCurrentField();
-      
-      const skipMessage = {
-        id: Date.now() + 1,
-        role: 'bot',
-        text: `Skipped the failed field "${currentFieldName}". Moving to next field.`,
-        options: null
-      };
-      
       setTimeout(() => {
-        setConversation(prev => [...prev, skipMessage]);
-        setTimeout(() => {
-          askNextField();
-        }, 1000);
-      }, 1000);
+        const currentArrays = {
+          highly: highlyErrorProne,
+          mid: midErrorProne,
+          stable: stable
+        };
+        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
+        setHighlyErrorProne(updatedArrays.highly);
+        setMidErrorProne(updatedArrays.mid);
+        setStable(updatedArrays.stable);
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Skipped the failed field "${currentFieldName}". Moving to next field.`,
+          options: null
+        });
+      }, 600);
     }
   };
 
-  // Initialize chat
-  const initializeChat = () => {
-    const welcomeMessage = {
-      id: Date.now(),
+  const initializeChat = useCallback(() => {
+    appendMessage({
+      id: uuid.v4(),
       role: 'bot',
       text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nI'll help you update your BOL fields systematically. We'll start with the most error-prone fields first.`,
       options: null
-    };
-    
-    setConversation([welcomeMessage]);
-    
+    });
     setTimeout(() => {
       askNextField();
-    }, 2000);
-  };
+    }, 1200);
+  }, [phoneNumber, askNextField, appendMessage]);
 
-  // Initialize conversation and handle back button
   useEffect(() => {
     if (!bolId) {
       Alert.alert('Error', 'BOL ID is required', [
@@ -513,19 +425,15 @@ export default function ChatInterface({ navigation, route }) {
       ]);
       return;
     }
-
     setTimeout(() => {
       initializeChat();
-    }, 500);
-
-    // Handle hardware back button
+    }, 400);
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       navigation.goBack();
       return true;
     });
-
     return () => backHandler.remove();
-  }, [bolId, phoneNumber]);
+  }, [bolId, phoneNumber, initializeChat]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -533,36 +441,30 @@ export default function ChatInterface({ navigation, route }) {
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerInfo}>
               <Text style={styles.headerTitle}>BOL Update Assistant</Text>
               <Text style={styles.headerSubtitle}>BOLy - Field Update Chat</Text>
             </View>
           </View>
-
-          {/* Info Bar */}
           <View style={styles.infoBar}>
             <Text style={styles.infoText}>
               📱 {phoneNumber} • 🤖 BOLy Assistant • 📝 BOL: {bolId}
             </Text>
           </View>
-
-          {/* Progress Bar */}
           <View style={styles.progressBar}>
             <Text style={styles.progressText}>
-              Current: {getCurrentArrayName()} • 
+              Current: {getCurrentArrayName()} •
               Remaining: H:{highlyErrorProne.length} M:{midErrorProne.length} S:{stable.length}
             </Text>
           </View>
-
-          {/* Chat Area */}
           <ScrollView
+            ref={scrollViewRef}
             style={styles.chatArea}
             contentContainerStyle={styles.chatContent}
             showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
           >
             {conversation.map(msg => (
               <View key={msg.id} style={styles.messageContainer}>
@@ -575,7 +477,6 @@ export default function ChatInterface({ navigation, route }) {
                   </View>
                   {msg.role === 'user' && <View style={styles.userAvatar}><Text>👤</Text></View>}
                 </View>
-
                 {msg.role === 'bot' && msg.options && (
                   <View style={styles.optionsContainer}>
                     {msg.options.map((option, index) => (
@@ -592,7 +493,6 @@ export default function ChatInterface({ navigation, route }) {
                 )}
               </View>
             ))}
-
             {awaitingResponse && (
               <View style={styles.messageContainer}>
                 <View style={styles.botMessageRow}>
@@ -606,8 +506,6 @@ export default function ChatInterface({ navigation, route }) {
               </View>
             )}
           </ScrollView>
-
-          {/* Input Area */}
           {waitingForInput && (
             <View style={styles.inputContainer}>
               <TextInput
@@ -618,6 +516,7 @@ export default function ChatInterface({ navigation, route }) {
                 onSubmitEditing={() => handleFieldUpdate(messageInput)}
                 autoFocus
                 editable={!isLoading}
+                blurOnSubmit={false}
               />
               <TouchableOpacity
                 onPress={() => handleFieldUpdate(messageInput)}
@@ -630,13 +529,11 @@ export default function ChatInterface({ navigation, route }) {
               </TouchableOpacity>
             </View>
           )}
-
-          {/* Status Bar */}
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
-                {sessionCompleted ? 'Session completed!' : 
-                 conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
+                {sessionCompleted ? 'Session completed!' :
+                  conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
               </Text>
             </View>
           )}
