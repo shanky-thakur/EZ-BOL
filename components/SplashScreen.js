@@ -1,5 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { Animated, View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import {
+  useEffect,
+  useRef
+} from 'react';
+import {
+  Animated,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Text
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 
