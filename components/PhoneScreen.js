@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, TextInput, Modal, FlatList, SafeAreaView, Alert } from 'react-native';
+import {
+    View,
+    StyleSheet,
+    TouchableOpacity,
+    Text,
+    TextInput,
+    Modal,
+    FlatList,
+    SafeAreaView,
+    Alert
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,11 +18,11 @@ import Constants from 'expo-constants';
 // Get the correct API URL for development
 const getApiUrl = () => {
     if (__DEV__) {
-        // For Expo development - this gets your computer's IP automatically
+        // For Expo development - this gets computer's IP automatically
         const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
         return `http://${debuggerHost}:3000`;
     }
-    // For production, use your actual API URL
+    // For production, use actual API URL
     return 'https://your-production-api.com';
 };
 
@@ -53,13 +63,13 @@ export default function PhoneNumber({ navigation }) {
         if (phoneNumber.length >= 7) {
             const fullPhoneNumber = `${selectedCountry.dialCode} ${phoneNumber}`;
             const phoneForAPI = `${selectedCountry.dialCode}${phoneNumber}`; // No space for API
-            
+
             setIsLoading(true);
-            
+
             // Debug logging
             console.log('API URL:', `${API_BASE_URL}/user/send-otp`);
             console.log('Phone data:', { phone: phoneForAPI });
-            
+
             try {
                 const response = await fetch(`${API_BASE_URL}/user/send-otp`, {
                     method: 'POST',
@@ -82,7 +92,7 @@ export default function PhoneNumber({ navigation }) {
                             text: 'OK',
                             onPress: () => {
                                 // Navigate to OTP screen
-                                navigation.replace('Otp', { 
+                                navigation.replace('Otp', {
                                     phoneNumber: fullPhoneNumber || +919625348422
                                 });
                             }
@@ -91,7 +101,7 @@ export default function PhoneNumber({ navigation }) {
                 } else {
                     // Handle API errors
                     Alert.alert(
-                        'Error', 
+                        'Error',
                         data.message || data.error || 'Failed to send OTP. Please try again.'
                     );
                 }
@@ -99,16 +109,16 @@ export default function PhoneNumber({ navigation }) {
                 console.error('Network Error Details:', error);
                 console.error('Error name:', error.name);
                 console.error('Error message:', error.message);
-                
+
                 // More specific error handling
                 if (error.message.includes('Network request failed')) {
                     Alert.alert(
-                        'Connection Error', 
-                        `Cannot connect to server at ${API_BASE_URL}. Make sure your backend server is running and your device is connected to the same network.`
+                        'Connection Error',
+                        `Cannot connect to server at ${API_BASE_URL}. Make sure backend server is running and your device is connected to the same network.`
                     );
                 } else {
                     Alert.alert(
-                        'Network Error', 
+                        'Network Error',
                         'Unable to connect to server. Please check your connection and try again.'
                     );
                 }
@@ -180,7 +190,7 @@ export default function PhoneNumber({ navigation }) {
                                 <View style={styles.phoneInputContainer}>
                                     <View style={styles.phoneInputWrapper}>
                                         {/* Country Picker Button */}
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={styles.countrySelector}
                                             onPress={() => setShowCountryModal(true)}
                                         >
@@ -208,13 +218,13 @@ export default function PhoneNumber({ navigation }) {
                     <View style={styles.lowerBox}>
                         <View style={styles.buttonEmptyBox}></View>
                         <View style={styles.buttonBox}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={[
-                                    styles.customeButton, 
-                                    { 
-                                        opacity: (phoneNumber.length > 0 && !isLoading) ? 1 : 0.5 
+                                    styles.customeButton,
+                                    {
+                                        opacity: (phoneNumber.length > 0 && !isLoading) ? 1 : 0.5
                                     }
-                                ]} 
+                                ]}
                                 onPress={handleNext}
                                 disabled={phoneNumber.length === 0 || isLoading}
                             >
