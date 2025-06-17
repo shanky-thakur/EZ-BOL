@@ -87,11 +87,6 @@ export default function ChatInterface({ navigation, route }) {
     }
   }, [highlyErrorProne, midErrorProne, stable]);
 
-  const getCurrentField = useCallback(() => {
-    const currentArrayData = getArrayByName(currentArray);
-    return currentArrayData[0] || null;
-  }, [currentArray, getArrayByName]);
-
   const getCurrentArrayName = useCallback(() => {
     switch (currentArray) {
       case 'highly': return 'Highly Error Prone Fields';
@@ -110,22 +105,6 @@ export default function ChatInterface({ navigation, route }) {
     return null;
   }, [currentArray, midErrorProne.length, stable.length]);
 
-  const removeCurrentFieldFromArray = useCallback((currentArrayName, arrays) => {
-    const updatedArrays = { ...arrays };
-    switch (currentArrayName) {
-      case 'highly':
-        updatedArrays.highly = arrays.highly.slice(1);
-        break;
-      case 'mid':
-        updatedArrays.mid = arrays.mid.slice(1);
-        break;
-      case 'stable':
-        updatedArrays.stable = arrays.stable.slice(1);
-        break;
-    }
-    return updatedArrays;
-  }, []);
-
   const areAllArraysEmpty = useCallback((arrays = null) => {
     const currentArrays = arrays || {
       highly: highlyErrorProne,
@@ -137,71 +116,20 @@ export default function ChatInterface({ navigation, route }) {
            currentArrays.stable.length === 0;
   }, [highlyErrorProne, midErrorProne, stable]);
 
-  const updateBOLField = async (field, value) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/bol/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: bolId, update: { [field]: value } }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        return { success: true, message: `Updated ${field} successfully` };
-      } else {
-        throw new Error(data.message || 'Update failed');
-      }
-    } catch (error) {
-      return { success: false, message: error.message };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!sessionCompleted && !awaitingResponse && !waitingForInput) {
-      if (
-        highlyErrorProne.length === 0 &&
-        midErrorProne.length === 0 &&
-        stable.length === 0
-      ) return;
-      askNextField();
-    }
-    // The critical fix: include currentArray in dependencies!
-  }, [highlyErrorProne, midErrorProne, stable, currentArray, sessionCompleted, awaitingResponse, waitingForInput, askNextField]);
-
-  const askNextField = useCallback(() => {
-    const currentArrays = {
-      highly: highlyErrorProne,
-      mid: midErrorProne,
-      stable: stable
-    };
-    if (areAllArraysEmpty(currentArrays)) {
-      appendMessage({
-        id: uuid.v4(),
-        role: 'bot',
-        text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
-        options: ['Start New Session', 'Exit']
-      });
-      setSessionCompleted(true);
-      setAwaitingResponse(false);
-      return;
-    }
-    const currentArrayData = getArrayByName(currentArray);
-    let field = currentArrayData[0] || null;
-    let arrayName = getCurrentArrayName();
-    if (!field) {
+  // --- Multi-field selection prompt ---
+  const promptFieldsInGroup = useCallback(() => {
+    const fields = getArrayByName(currentArray);
+    if (!fields.length) {
+      // Move to next array if this one is empty
       const nextArray = findNextAvailableArray();
       if (nextArray) {
         setCurrentArray(nextArray);
-        const nextArrayName = nextArray === 'mid' ? 'Moderately Error Prone Fields' : 'Stable Fields';
         appendMessage({
           id: uuid.v4(),
           role: 'bot',
-          text: `Moving to ${nextArrayName}. Let's continue with the updates.`,
+          text: `Moving to ${nextArray === 'mid' ? 'Moderately Error Prone Fields' : 'Stable Fields'}. Let's continue with the updates.`,
           options: null
         });
-        // Do NOT prompt for the next field here; let useEffect handle it!
         return;
       } else {
         appendMessage({
@@ -215,62 +143,24 @@ export default function ChatInterface({ navigation, route }) {
         return;
       }
     }
+    // Present all fields as options, plus a "No changes in this group" option
     appendMessage({
       id: uuid.v4(),
       role: 'bot',
-      text: `Do you want to update "${field}"?\n\nCurrently in: ${arrayName}`,
-      options: ['Yes', 'No']
+      text: `Which field would you like to update next in ${getCurrentArrayName()}?`,
+      options: [...fields, 'No changes in this group']
     });
     setAwaitingResponse(false);
-  }, [currentArray, highlyErrorProne, midErrorProne, stable, areAllArraysEmpty, getArrayByName, getCurrentArrayName, findNextAvailableArray, appendMessage]);
+  }, [currentArray, getArrayByName, getCurrentArrayName, findNextAvailableArray, appendMessage]);
 
-  const handleFieldUpdate = async (value) => {
-    if (!value.trim()) return;
-    const field = getCurrentField();
-    if (!field) return;
-    appendMessage({
-      id: uuid.v4(),
-      role: 'user',
-      text: value
-    });
-    setWaitingForInput(false);
-    setMessageInput('');
-    setAwaitingResponse(true);
-    const result = await updateBOLField(field, value);
-    appendMessage({
-      id: uuid.v4(),
-      role: 'bot',
-      text: result.success ?
-        `✅ ${result.message}` :
-        `❌ Failed to update ${field}: ${result.message}`,
-      options: null
-    });
-    if (result.success) {
-      setTimeout(() => {
-        const currentArrays = {
-          highly: highlyErrorProne,
-          mid: midErrorProne,
-          stable: stable
-        };
-        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
-        setHighlyErrorProne(updatedArrays.highly);
-        setMidErrorProne(updatedArrays.mid);
-        setStable(updatedArrays.stable);
-        setAwaitingResponse(false);
-      }, 1000);
-    } else {
-      setTimeout(() => {
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Would you like to try updating "${field}" again?`,
-          options: ['Yes, try again', 'No, skip this field']
-        });
-        setAwaitingResponse(false);
-      }, 1000);
+  // --- Effect: prompt fields whenever array changes ---
+  useEffect(() => {
+    if (!sessionCompleted && !awaitingResponse && !waitingForInput) {
+      promptFieldsInGroup();
     }
-  };
+  }, [highlyErrorProne, midErrorProne, stable, currentArray, sessionCompleted, awaitingResponse, waitingForInput, promptFieldsInGroup]);
 
+  // --- Handle user selecting a field or "No changes" ---
   const handleOptionSelect = (option) => {
     if (sessionCompleted) {
       if (option === 'Start New Session') {
@@ -318,83 +208,146 @@ export default function ChatInterface({ navigation, route }) {
         return;
       }
     }
+
     appendMessage({
       id: uuid.v4(),
       role: 'user',
       text: option
     });
     setAwaitingResponse(true);
-    if (option === 'Yes') {
-      const field = getCurrentField();
-      if (!field) return;
-      setCurrentField(field);
-      setWaitingForInput(true);
-      setTimeout(() => {
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Please enter the new value for "${field}":`,
-          options: null
-        });
-        setAwaitingResponse(false);
-      }, 600);
-    } else if (option === 'No') {
-      const currentFieldName = getCurrentField();
-      setTimeout(() => {
-        const currentArrays = {
-          highly: highlyErrorProne,
-          mid: midErrorProne,
-          stable: stable
-        };
-        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
-        setHighlyErrorProne(updatedArrays.highly);
-        setMidErrorProne(updatedArrays.mid);
-        setStable(updatedArrays.stable);
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Skipped "${currentFieldName}". Moving to next field.`,
-          options: null
-        });
-        setAwaitingResponse(false);
-      }, 600);
-    } else if (option === 'Yes, try again') {
-      const field = getCurrentField();
-      if (!field) return;
-      setCurrentField(field);
-      setWaitingForInput(true);
-      setTimeout(() => {
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Please enter the new value for "${field}" again:`,
-          options: null
-        });
-        setAwaitingResponse(false);
-      }, 600);
-    } else if (option === 'No, skip this field') {
-      const currentFieldName = getCurrentField();
-      setTimeout(() => {
-        const currentArrays = {
-          highly: highlyErrorProne,
-          mid: midErrorProne,
-          stable: stable
-        };
-        const updatedArrays = removeCurrentFieldFromArray(currentArray, currentArrays);
-        setHighlyErrorProne(updatedArrays.highly);
-        setMidErrorProne(updatedArrays.mid);
-        setStable(updatedArrays.stable);
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Skipped the failed field "${currentFieldName}". Moving to next field.`,
-          options: null
-        });
-        setAwaitingResponse(false);
-      }, 600);
+
+    const fields = getArrayByName(currentArray);
+
+    if (option === 'No changes in this group') {
+      // Clear current array and let effect move to next group
+      if (currentArray === 'highly') setHighlyErrorProne([]);
+      else if (currentArray === 'mid') setMidErrorProne([]);
+      else if (currentArray === 'stable') setStable([]);
+      setAwaitingResponse(false);
+      return;
+    }
+
+    if (!fields.includes(option)) return;
+
+    setCurrentField(option);
+    setWaitingForInput(true);
+    setTimeout(() => {
+      appendMessage({
+        id: uuid.v4(),
+        role: 'bot',
+        text: `Please enter the new value for "${option}":`,
+        options: null
+      });
+      setAwaitingResponse(false);
+    }, 400);
+  };
+
+  // --- Handle field update and repeat field selection ---
+  const updateBOLField = async (field, value) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/bol/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: bolId, update: { [field]: value } }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        return { success: true, message: `Updated ${field} successfully` };
+      } else {
+        throw new Error(data.message || 'Update failed');
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleFieldUpdate = async (value) => {
+    if (!value.trim()) return;
+    const field = currentField;
+    if (!field) return;
+    appendMessage({
+      id: uuid.v4(),
+      role: 'user',
+      text: value
+    });
+    setWaitingForInput(false);
+    setMessageInput('');
+    setAwaitingResponse(true);
+    const result = await updateBOLField(field, value);
+    appendMessage({
+      id: uuid.v4(),
+      role: 'bot',
+      text: result.success ?
+        `✅ ${result.message}` :
+        `❌ Failed to update ${field}: ${result.message}`,
+      options: null
+    });
+    if (result.success) {
+      setTimeout(() => {
+        // Remove field from current array and re-prompt
+        if (currentArray === 'highly') setHighlyErrorProne(arr => arr.filter(f => f !== field));
+        else if (currentArray === 'mid') setMidErrorProne(arr => arr.filter(f => f !== field));
+        else if (currentArray === 'stable') setStable(arr => arr.filter(f => f !== field));
+        setAwaitingResponse(false);
+      }, 800);
+    } else {
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Would you like to try updating "${field}" again?`,
+          options: ['Yes, try again', 'No, skip this field']
+        });
+        setAwaitingResponse(false);
+      }, 800);
+    }
+  };
+
+  // --- Handle retry/skip after failed update ---
+  useEffect(() => {
+    if (!waitingForInput && !awaitingResponse && !sessionCompleted) {
+      // If the last bot message is a retry/skip prompt, handle accordingly
+      const lastBot = conversation[conversation.length - 1];
+      if (lastBot && lastBot.role === 'bot' && lastBot.options && lastBot.options[0] === 'Yes, try again') {
+        // Wait for user to pick an option
+      }
+    }
+  }, [conversation, waitingForInput, awaitingResponse, sessionCompleted]);
+
+  // --- Handle retry/skip option selection ---
+  const handleRetryOrSkip = (option) => {
+    appendMessage({
+      id: uuid.v4(),
+      role: 'user',
+      text: option
+    });
+    setAwaitingResponse(true);
+    if (option === 'Yes, try again') {
+      setWaitingForInput(true);
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `Please enter the new value for "${currentField}" again:`,
+          options: null
+        });
+        setAwaitingResponse(false);
+      }, 400);
+    } else if (option === 'No, skip this field') {
+      setTimeout(() => {
+        // Remove field from current array and re-prompt
+        if (currentArray === 'highly') setHighlyErrorProne(arr => arr.filter(f => f !== currentField));
+        else if (currentArray === 'mid') setMidErrorProne(arr => arr.filter(f => f !== currentField));
+        else if (currentArray === 'stable') setStable(arr => arr.filter(f => f !== currentField));
+        setAwaitingResponse(false);
+      }, 400);
+    }
+  };
+
+  // --- Only call initializeChat ONCE on mount (not on every update) ---
   const initializeChat = useCallback(() => {
     if (welcomeShown) return;
     setWelcomeShown(true);
@@ -405,9 +358,9 @@ export default function ChatInterface({ navigation, route }) {
       options: null
     });
     setTimeout(() => {
-      askNextField();
+      promptFieldsInGroup();
     }, 500);
-  }, [phoneNumber, askNextField, appendMessage, welcomeShown]);
+  }, [phoneNumber, promptFieldsInGroup, appendMessage, welcomeShown]);
 
   useEffect(() => {
     if (!bolId) {
@@ -422,7 +375,6 @@ export default function ChatInterface({ navigation, route }) {
       return true;
     });
     return () => backHandler.remove();
-    // eslint-disable-next-line
   }, []); // Only run on mount
 
   return (
@@ -469,16 +421,31 @@ export default function ChatInterface({ navigation, route }) {
                 </View>
                 {msg.role === 'bot' && msg.options && (
                   <View style={styles.optionsContainer}>
-                    {msg.options.map((option, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        onPress={() => handleOptionSelect(option)}
-                        style={styles.optionButton}
-                        disabled={isLoading}
-                      >
-                        <Text style={styles.optionText}>{option}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {msg.options.map((option, index) => {
+                      // Special case: retry/skip options after a failed update
+                      if (msg.options[0] === 'Yes, try again') {
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            onPress={() => handleRetryOrSkip(option)}
+                            style={styles.optionButton}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.optionText}>{option}</Text>
+                          </TouchableOpacity>
+                        );
+                      }
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => handleOptionSelect(option)}
+                          style={styles.optionButton}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.optionText}>{option}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 )}
               </View>
