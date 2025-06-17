@@ -1,3 +1,7 @@
+
+//               This file is just for debug purposes, it has no use in the application
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
