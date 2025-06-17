@@ -15,12 +15,12 @@ import Constants from 'expo-constants';
 // Get the correct API URL for development
 const getApiUrl = () => {
   if (__DEV__) {
-    // For Expo development - this gets your computer's IP automatically
+    // For Expo development - this gets computer's IP automatically
     const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
     return `http://${debuggerHost}:3000`;
   }
-  // For production, use your actual API URL
-  return 'https://your-production-api.com';
+  // For production, use actual API URL
+  return 'https://production-api.com';
 };
 
 const API_BASE_URL = getApiUrl();
@@ -82,7 +82,7 @@ export default function BOLListScreen({ navigation, route }) {
       navigation.goBack();
     } else {
       // If can't go back, navigate to a default screen
-      navigation.navigate('Login'); // or whatever your main screen is
+      navigation.navigate('Login'); 
     }
   };
 
@@ -91,7 +91,8 @@ export default function BOLListScreen({ navigation, route }) {
     // Navigate to chat interface with selected BOL
     navigation.navigate('Home', { 
       phoneNumber: phoneNumber,
-      selectedBol: bol 
+      selectedBol: bol,
+      bolId: bol._id
     });
   };
 
