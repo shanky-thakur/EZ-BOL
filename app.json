@@ -4,7 +4,6 @@
     "slug": "EZ-BOL",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/EZ_BOL-removebg-preview",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {

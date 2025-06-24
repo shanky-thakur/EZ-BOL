@@ -5,6 +5,7 @@ import PhoneScreen from './components/PhoneScreen';
 import OtpScreen from './components/OtpScreen';
 import HomeScreen from './components/HomeScreen';
 import BOLScreen from './components/BOLScreen';
+import Dashboard from './components/Dashboard';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +16,7 @@ export default function App() {
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Phone" component={PhoneScreen} />
         <Stack.Screen name='Otp' component={OtpScreen} />
+        <Stack.Screen name='Dashboard' component={Dashboard} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="BOL" component={BOLScreen} />
       </Stack.Navigator>
