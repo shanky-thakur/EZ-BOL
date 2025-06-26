@@ -45,7 +45,7 @@ export default function SplashScreen({ navigation }) {
           </View>
 
           <View style={styles.postGradientContainerBody}>
-            <TouchableOpacity style={styles.postGradientContainerBodyButton} onPress={() => navigation.replace('Phone')}>
+            <TouchableOpacity style={styles.postGradientContainerBodyButton} onPress={() => navigation.replace('Dashboard')}>
               <Text style={styles.customButtonText}>Get Started</Text>
             </TouchableOpacity>
           </View>
