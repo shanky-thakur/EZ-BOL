@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,36 +8,108 @@ import {
   Dimensions,
   ScrollView,
   StatusBar,
-  Image
+  Image,
+  ActivityIndicator 
 } from 'react-native';
+import Constants from 'expo-constants';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const getApiUrl = () => {
+  if (__DEV__) {
+    const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
+    return `http://${debuggerHost}:3000`;
+  }
+  return 'https://your-production-api.com';
+};
+
+const API_BASE_URL = getApiUrl();
 
 export default function WelcomeScreen({ navigation, route }) {
-  const userName = route?.params?.userName || 'John Doe';
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
-  const tripsCount = route?.params?.tripsCount || 24;
 
-  const handleGetStarted = () => {
-    navigation.navigate('Dashboard', { phoneNumber, userName });
-  };
+  const [userData, setUserData] = useState({
+    userName: 'Loading...',
+    phoneNumber: '',
+    tripsCount: 0,
+    id: ''
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true);
+
+      const response = await fetch(`${API_BASE_URL}/user/get-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phoneNumber
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      setUserData({
+        userName: data.data.name,
+        phoneNumber: data.data.phone,
+        tripsCount: data.data.bolArray.length,
+        id: data.data._id
+      });
+    }
+    catch (err) {
+      setUserData({
+        userName: route?.params?.userName || 'Error',
+        phoneNumber: route?.params?.phoneNumber || 'Error',
+        tripsCount: route?.params?.tripsCount || 'Error',
+        id: 'Error'
+      });
+    }
+    finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchUserData();
+  }, []);
 
   const handleViewTrips = () => {
-    navigation.navigate('BOLList', { phoneNumber });
+    navigation.navigate('BOL', {
+      phoneNumber: userData.phoneNumber
+    });
   };
+
+  // Show loading screen while fetching data
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Image 
+            source={require('../assets/EZ_BOL-removebg-preview.png')}
+            style={styles.loadingLogo}
+            resizeMode="contain"
+          />
+          <ActivityIndicator size="large" color="#1e40af" style={styles.loadingSpinner} />
+          <Text style={styles.loadingText}>Loading your dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor="#1e40af" />
       <SafeAreaView style={styles.container}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Professional Header */}
           <View style={styles.headerContainer}>
             <View style={styles.logoContainer}>
-              <Image 
+              <Image
                 source={require('../assets/EZ_BOL-removebg-preview.png')}
                 style={styles.logoImage}
                 resizeMode="contain"
@@ -49,26 +121,24 @@ export default function WelcomeScreen({ navigation, route }) {
             </View>
           </View>
 
-          {/* Welcome Section */}
           <View style={styles.contentContainer}>
             <View style={styles.welcomeCard}>
               <Text style={styles.welcomeTitle}>Welcome back</Text>
-              <Text style={styles.userName}>{userName}</Text>
+              <Text style={styles.userName}>{userData.userName}</Text>
               <Text style={styles.welcomeSubtitle}>
                 Your logistics dashboard is ready
               </Text>
             </View>
 
-            {/* Stats Overview */}
             <View style={styles.statsContainer}>
               <View style={styles.statCard}>
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>📊</Text>
                 </View>
-                <Text style={styles.statNumber}>{tripsCount}</Text>
+                <Text style={styles.statNumber}>{userData.tripsCount}</Text>
                 <Text style={styles.statLabel}>Active Shipments</Text>
               </View>
-              
+
               <View style={styles.statCard}>
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>🤝</Text>
@@ -78,11 +148,10 @@ export default function WelcomeScreen({ navigation, route }) {
               </View>
             </View>
 
-            {/* Quick Actions */}
             <View style={styles.quickActionsContainer}>
               <Text style={styles.sectionTitle}>Quick Actions</Text>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.actionCard}
                 onPress={handleViewTrips}
                 activeOpacity={0.7}
@@ -98,17 +167,20 @@ export default function WelcomeScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            {/* User Profile Summary */}
             <View style={styles.profileCard}>
               <Text style={styles.sectionTitle}>Account Information</Text>
               <View style={styles.profileRow}>
                 <Text style={styles.profileLabel}>Name</Text>
-                <Text style={styles.profileValue}>{userName}</Text>
+                <Text style={styles.profileValue}>{userData.userName}</Text>
               </View>
               <View style={styles.profileDivider} />
               <View style={styles.profileRow}>
                 <Text style={styles.profileLabel}>Phone</Text>
-                <Text style={styles.profileValue}>{phoneNumber}</Text>
+                <Text style={styles.profileValue}>{userData.phoneNumber}</Text>
+              </View>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>Id</Text>
+                <Text style={styles.profileValue}>{userData.id}</Text>
               </View>
             </View>
           </View>
@@ -309,5 +381,28 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e2e8f0',
     marginVertical: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 24,
+  },
+  loadingLogo: {
+    width: 100,
+    height: 100,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 32,
+  },
+  loadingSpinner: {
+    marginBottom: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748b',
+    fontWeight: '500',
   },
 });
