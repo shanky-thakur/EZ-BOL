@@ -24,6 +24,7 @@ const getApiUrl = () => {
 };
 
 const API_BASE_URL = getApiUrl();
+const CHAT_API_URL = 'https://thakur.app.n8n.cloud/webhook/f19d4ceb-8883-4b3e-b324-ef31b8262e83/chat';
 
 export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
@@ -32,42 +33,10 @@ export default function ChatInterface({ navigation, route }) {
   const conversationRef = useRef([]);
   const [conversation, setConversation] = useState([]);
   const [waitingForInput, setWaitingForInput] = useState(false);
-  const [currentField, setCurrentField] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
-
-  const [highlyErrorProne, setHighlyErrorProne] = useState([
-    "shipperName",
-    "shipperPhoneNumber",
-    "consigneeName",
-    "consigneePhoneNumber",
-    "classOrDensity",
-    "Units",
-    "Weight"
-  ]);
-  const [midErrorProne, setMidErrorProne] = useState([
-    "Dtae",
-    "nmfcCode",
-    "hazmat",
-    "kindOfPacking",
-    "amount"
-  ]);
-  const [stable, setStable] = useState([
-    "proBarcode",
-    "shipperStreet",
-    "shipperCity",
-    "shipperNumber",
-    "consigneeStreet",
-    "consigneeCity",
-    "customerReferenceNumber",
-    "collectCheckBox",
-    "guranteedCheckBox",
-    "lbOrKgFlag",
-    "currencyFlag",
-    "authorizedSignature"
-  ]);
-  const [currentArray, setCurrentArray] = useState('highly');
+  const [sessionId] = useState(uuid.v4().replace(/-/g, ''));
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [welcomeShown, setWelcomeShown] = useState(false);
 
@@ -78,127 +47,119 @@ export default function ChatInterface({ navigation, route }) {
     setConversation([...conversationRef.current]);
   }, []);
 
-  const getArrayByName = useCallback((arrayName) => {
-    switch (arrayName) {
-      case 'highly': return highlyErrorProne;
-      case 'mid': return midErrorProne;
-      case 'stable': return stable;
-      default: return [];
-    }
-  }, [highlyErrorProne, midErrorProne, stable]);
+  // API call to chatbot
+  const sendMessageToBot = async (message) => {
+    try {
+      setIsLoading(true);
+      setAwaitingResponse(true);
+      
+      const requestBody = {
+        sessionId: sessionId,
+        action: "sendMessage",
+        chatInput: message
+      };
+      
+      console.log('Sending request to:', CHAT_API_URL);
+      console.log('Request body:', JSON.stringify(requestBody, null, 2));
+      
+      const response = await fetch(CHAT_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-  const getCurrentArrayName = useCallback(() => {
-    switch (currentArray) {
-      case 'highly': return 'Highly Error Prone Fields';
-      case 'mid': return 'Moderately Error Prone Fields';
-      case 'stable': return 'Stable Fields';
-      default: return '';
-    }
-  }, [currentArray]);
-
-  const findNextAvailableArray = useCallback(() => {
-    if (currentArray === 'highly' && midErrorProne.length > 0) {
-      return 'mid';
-    } else if ((currentArray === 'highly' || currentArray === 'mid') && stable.length > 0) {
-      return 'stable';
-    }
-    return null;
-  }, [currentArray, midErrorProne.length, stable.length]);
-
-  const areAllArraysEmpty = useCallback((arrays = null) => {
-    const currentArrays = arrays || {
-      highly: highlyErrorProne,
-      mid: midErrorProne,
-      stable: stable
-    };
-    return currentArrays.highly.length === 0 &&
-           currentArrays.mid.length === 0 &&
-           currentArrays.stable.length === 0;
-  }, [highlyErrorProne, midErrorProne, stable]);
-
-  // --- Multi-field selection prompt ---
-  const promptFieldsInGroup = useCallback(() => {
-    const fields = getArrayByName(currentArray);
-    if (!fields.length) {
-      // Move to next array if this one is empty
-      const nextArray = findNextAvailableArray();
-      if (nextArray) {
-        setCurrentArray(nextArray);
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Moving to ${nextArray === 'mid' ? 'Moderately Error Prone Fields' : 'Stable Fields'}. Let's continue with the updates.`,
-          options: null
-        });
-        return;
-      } else {
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: '🎉 All field updates have been completed! Your BOL has been successfully updated.',
-          options: ['Start New Session', 'Exit']
-        });
-        setSessionCompleted(true);
-        setAwaitingResponse(false);
-        return;
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      // Try to get response text first
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
       }
-    }
-    // Present all fields as options, plus a "No changes in this group" option
-    appendMessage({
-      id: uuid.v4(),
-      role: 'bot',
-      text: `Which field would you like to update next in ${getCurrentArrayName()}?`,
-      options: [...fields, 'No changes in this group']
-    });
-    setAwaitingResponse(false);
-  }, [currentArray, getArrayByName, getCurrentArrayName, findNextAvailableArray, appendMessage]);
 
-  // --- Effect: prompt fields whenever array changes ---
-  useEffect(() => {
-    if (!sessionCompleted && !awaitingResponse && !waitingForInput) {
-      promptFieldsInGroup();
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', parseError);
+        throw new Error(`Invalid JSON response: ${responseText}`);
+      }
+      
+      console.log('Parsed response:', JSON.stringify(data, null, 2));
+      return data;
+    } catch (error) {
+      console.error('Error sending message to bot:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-  }, [highlyErrorProne, midErrorProne, stable, currentArray, sessionCompleted, awaitingResponse, waitingForInput, promptFieldsInGroup]);
+  };
 
-  // --- Handle user selecting a field or "No changes" ---
-  const handleOptionSelect = (option) => {
+  // Process bot response and determine if it's options or input request
+  const processBotResponse = (response) => {
+    // Check if response contains options/buttons
+    if (response.options && Array.isArray(response.options) && response.options.length > 0) {
+      return {
+        type: 'options',
+        text: response.message || response.text || '',
+        options: response.options
+      };
+    }
+    
+    // Check if response is asking for input (common patterns)
+    const text = response.message || response.text || '';
+    const isInputRequest = text.toLowerCase().includes('enter') || 
+                          text.toLowerCase().includes('input') || 
+                          text.toLowerCase().includes('provide') ||
+                          text.includes(':') && text.toLowerCase().includes('value');
+    
+    if (isInputRequest) {
+      return {
+        type: 'input',
+        text: text,
+        options: null
+      };
+    }
+
+    // Check if session is completed
+    const isCompleted = text.toLowerCase().includes('completed') || 
+                       text.toLowerCase().includes('finished') ||
+                       text.toLowerCase().includes('done') ||
+                       response.sessionComplete === true;
+
+    if (isCompleted) {
+      return {
+        type: 'completed',
+        text: text,
+        options: ['Start New Session', 'Exit']
+      };
+    }
+
+    // Default to regular message
+    return {
+      type: 'message',
+      text: text,
+      options: null
+    };
+  };
+
+  // Handle user selecting an option
+  const handleOptionSelect = async (option) => {
     if (sessionCompleted) {
       if (option === 'Start New Session') {
-        setHighlyErrorProne([
-          "shipperName",
-          "shipperPhoneNumber",
-          "consigneeName",
-          "consigneePhoneNumber",
-          "classOrDensity",
-          "Units",
-          "Weight"
-        ]);
-        setMidErrorProne([
-          "Dtae",
-          "nmfcCode",
-          "hazmat",
-          "kindOfPacking",
-          "amount"
-        ]);
-        setStable([
-          "proBarcode",
-          "shipperStreet",
-          "shipperCity",
-          "shipperNumber",
-          "consigneeStreet",
-          "consigneeCity",
-          "customerReferenceNumber",
-          "collectCheckBox",
-          "guranteedCheckBox",
-          "lbOrKgFlag",
-          "currencyFlag",
-          "authorizedSignature"
-        ]);
-        setCurrentArray('highly');
+        // Reset session
         setSessionCompleted(false);
         conversationRef.current = [];
         setConversation([]);
         setWelcomeShown(false);
+        setAwaitingResponse(false);
+        setWaitingForInput(false);
+        
         setTimeout(() => {
           initializeChat();
         }, 500);
@@ -209,158 +170,163 @@ export default function ChatInterface({ navigation, route }) {
       }
     }
 
-    appendMessage({
-      id: uuid.v4(),
-      role: 'user',
-      text: option
-    });
-    setAwaitingResponse(true);
-
-    const fields = getArrayByName(currentArray);
-
-    if (option === 'No changes in this group') {
-      // Clear current array and let effect move to next group
-      if (currentArray === 'highly') setHighlyErrorProne([]);
-      else if (currentArray === 'mid') setMidErrorProne([]);
-      else if (currentArray === 'stable') setStable([]);
-      setAwaitingResponse(false);
+    // Handle retry option
+    if (option === 'Retry') {
+      setWelcomeShown(false);
+      setTimeout(() => {
+        initializeChat();
+      }, 500);
       return;
     }
 
-    if (!fields.includes(option)) return;
-
-    setCurrentField(option);
-    setWaitingForInput(true);
-    setTimeout(() => {
-      appendMessage({
-        id: uuid.v4(),
-        role: 'bot',
-        text: `Please enter the new value for "${option}":`,
-        options: null
-      });
-      setAwaitingResponse(false);
-    }, 400);
-  };
-
-  // --- Handle field update and repeat field selection ---
-  const updateBOLField = async (field, value) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/bol/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: bolId, update: { [field]: value } }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        return { success: true, message: `Updated ${field} successfully` };
-      } else {
-        throw new Error(data.message || 'Update failed');
-      }
-    } catch (error) {
-      return { success: false, message: error.message };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleFieldUpdate = async (value) => {
-    if (!value.trim()) return;
-    const field = currentField;
-    if (!field) return;
-    appendMessage({
-      id: uuid.v4(),
-      role: 'user',
-      text: value
-    });
-    setWaitingForInput(false);
-    setMessageInput('');
-    setAwaitingResponse(true);
-    const result = await updateBOLField(field, value);
-    appendMessage({
-      id: uuid.v4(),
-      role: 'bot',
-      text: result.success ?
-        `✅ ${result.message}` :
-        `❌ Failed to update ${field}: ${result.message}`,
-      options: null
-    });
-    if (result.success) {
-      setTimeout(() => {
-        // Remove field from current array and re-prompt
-        if (currentArray === 'highly') setHighlyErrorProne(arr => arr.filter(f => f !== field));
-        else if (currentArray === 'mid') setMidErrorProne(arr => arr.filter(f => f !== field));
-        else if (currentArray === 'stable') setStable(arr => arr.filter(f => f !== field));
-        setAwaitingResponse(false);
-      }, 800);
-    } else {
-      setTimeout(() => {
-        appendMessage({
-          id: uuid.v4(),
-          role: 'bot',
-          text: `Would you like to try updating "${field}" again?`,
-          options: ['Yes, try again', 'No, skip this field']
-        });
-        setAwaitingResponse(false);
-      }, 800);
-    }
-  };
-
-  // --- Handle retry/skip after failed update ---
-  useEffect(() => {
-    if (!waitingForInput && !awaitingResponse && !sessionCompleted) {
-      // If the last bot message is a retry/skip prompt, handle accordingly
-      const lastBot = conversation[conversation.length - 1];
-      if (lastBot && lastBot.role === 'bot' && lastBot.options && lastBot.options[0] === 'Yes, try again') {
-        // Wait for user to pick an option
-      }
-    }
-  }, [conversation, waitingForInput, awaitingResponse, sessionCompleted]);
-
-  // --- Handle retry/skip option selection ---
-  const handleRetryOrSkip = (option) => {
+    // Add user message to conversation
     appendMessage({
       id: uuid.v4(),
       role: 'user',
       text: option
     });
-    setAwaitingResponse(true);
-    if (option === 'Yes, try again') {
-      setWaitingForInput(true);
+
+    try {
+      // Send selected option to bot
+      console.log('Sending option to bot:', option);
+      const botResponse = await sendMessageToBot(option);
+      console.log('Bot response for option:', botResponse);
+      
+      const processedResponse = processBotResponse(botResponse);
+      
+      // Add bot response to conversation
       setTimeout(() => {
         appendMessage({
           id: uuid.v4(),
           role: 'bot',
-          text: `Please enter the new value for "${currentField}" again:`,
-          options: null
+          text: processedResponse.text,
+          options: processedResponse.options
         });
+
+        // Handle different response types
+        if (processedResponse.type === 'input') {
+          setWaitingForInput(true);
+        } else if (processedResponse.type === 'completed') {
+          setSessionCompleted(true);
+        }
+        
         setAwaitingResponse(false);
       }, 400);
-    } else if (option === 'No, skip this field') {
+
+    } catch (error) {
+      console.error('Error handling option select:', error);
       setTimeout(() => {
-        // Remove field from current array and re-prompt
-        if (currentArray === 'highly') setHighlyErrorProne(arr => arr.filter(f => f !== currentField));
-        else if (currentArray === 'mid') setMidErrorProne(arr => arr.filter(f => f !== currentField));
-        else if (currentArray === 'stable') setStable(arr => arr.filter(f => f !== currentField));
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `❌ Sorry, I encountered an error: ${error.message}`,
+          options: ['Retry', 'Exit']
+        });
         setAwaitingResponse(false);
       }, 400);
     }
   };
 
-  // --- Only call initializeChat ONCE on mount (not on every update) ---
-  const initializeChat = useCallback(() => {
+  // Handle text input submission
+  const handleTextInput = async (inputText) => {
+    if (!inputText.trim()) return;
+
+    // Add user message to conversation
+    appendMessage({
+      id: uuid.v4(),
+      role: 'user',
+      text: inputText
+    });
+
+    setWaitingForInput(false);
+    setMessageInput('');
+
+    try {
+      // Send input to bot
+      const botResponse = await sendMessageToBot(inputText);
+      const processedResponse = processBotResponse(botResponse);
+      
+      // Add bot response to conversation
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: processedResponse.text,
+          options: processedResponse.options
+        });
+
+        // Handle different response types
+        if (processedResponse.type === 'input') {
+          setWaitingForInput(true);
+        } else if (processedResponse.type === 'completed') {
+          setSessionCompleted(true);
+        }
+        
+        setAwaitingResponse(false);
+      }, 800);
+
+    } catch (error) {
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `❌ Sorry, I encountered an error processing your input. Please try again.`,
+          options: null
+        });
+        setAwaitingResponse(false);
+      }, 800);
+    }
+  };
+
+  // Initialize chat session
+  const initializeChat = useCallback(async () => {
     if (welcomeShown) return;
     setWelcomeShown(true);
+    
+    // Show welcome message
     appendMessage({
       id: uuid.v4(),
       role: 'bot',
-      text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nI'll help you update your BOL fields systematically. We'll start with the most error-prone fields first.`,
+      text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nI'll help you update your BOL fields systematically. Let me get started...`,
       options: null
     });
-    setTimeout(() => {
-      promptFieldsInGroup();
-    }, 500);
-  }, [phoneNumber, promptFieldsInGroup, appendMessage, welcomeShown]);
+
+    try {
+      // Test with a simple message first
+      console.log('Initializing chat with sessionId:', sessionId);
+      const botResponse = await sendMessageToBot('Hello');
+      console.log('Bot response received:', botResponse);
+      
+      const processedResponse = processBotResponse(botResponse);
+      
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: processedResponse.text,
+          options: processedResponse.options
+        });
+
+        if (processedResponse.type === 'input') {
+          setWaitingForInput(true);
+        }
+        
+        setAwaitingResponse(false);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Chat initialization error:', error);
+      setTimeout(() => {
+        appendMessage({
+          id: uuid.v4(),
+          role: 'bot',
+          text: `❌ Failed to initialize chat session. Error: ${error.message}\n\nPlease check the console for more details.`,
+          options: ['Retry', 'Exit']
+        });
+        setAwaitingResponse(false);
+      }, 1000);
+    }
+  }, [phoneNumber, appendMessage, welcomeShown, sessionId]);
 
   useEffect(() => {
     if (!bolId) {
@@ -369,11 +335,14 @@ export default function ChatInterface({ navigation, route }) {
       ]);
       return;
     }
+    
     initializeChat();
+    
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       navigation.goBack();
       return true;
     });
+    
     return () => backHandler.remove();
   }, []); // Only run on mount
 
@@ -387,20 +356,21 @@ export default function ChatInterface({ navigation, route }) {
           <View style={styles.header}>
             <View style={styles.headerInfo}>
               <Text style={styles.headerTitle}>BOL Update Assistant</Text>
-              <Text style={styles.headerSubtitle}>BOLy - Field Update Chat</Text>
             </View>
           </View>
+          
           <View style={styles.infoBar}>
             <Text style={styles.infoText}>
               📱 {phoneNumber} • 🤖 BOLy Assistant • 📝 BOL: {bolId}
             </Text>
           </View>
+          
           <View style={styles.progressBar}>
             <Text style={styles.progressText}>
-              Current: {getCurrentArrayName()} •
-              Remaining: H:{highlyErrorProne.length} M:{midErrorProne.length} S:{stable.length}
+              Session ID: {sessionId} • Status: {sessionCompleted ? 'Completed' : 'Active'}
             </Text>
           </View>
+          
           <ScrollView
             ref={scrollViewRef}
             style={styles.chatArea}
@@ -419,64 +389,53 @@ export default function ChatInterface({ navigation, route }) {
                   </View>
                   {msg.role === 'user' && <View style={styles.userAvatar}><Text>👤</Text></View>}
                 </View>
+                
                 {msg.role === 'bot' && msg.options && (
                   <View style={styles.optionsContainer}>
-                    {msg.options.map((option, index) => {
-                      // Special case: retry/skip options after a failed update
-                      if (msg.options[0] === 'Yes, try again') {
-                        return (
-                          <TouchableOpacity
-                            key={index}
-                            onPress={() => handleRetryOrSkip(option)}
-                            style={styles.optionButton}
-                            disabled={isLoading}
-                          >
-                            <Text style={styles.optionText}>{option}</Text>
-                          </TouchableOpacity>
-                        );
-                      }
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => handleOptionSelect(option)}
-                          style={styles.optionButton}
-                          disabled={isLoading}
-                        >
-                          <Text style={styles.optionText}>{option}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                    {msg.options.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => handleOptionSelect(option)}
+                        style={styles.optionButton}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.optionText}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
               </View>
             ))}
+            
             {awaitingResponse && (
               <View style={styles.messageContainer}>
                 <View style={styles.botMessageRow}>
                   <View style={styles.botAvatar}><Text>🤖</Text></View>
                   <View style={styles.botMessage}>
                     <Text style={styles.typingText}>
-                      {isLoading ? 'Updating BOL...' : 'BOLy is typing...'}
+                      {isLoading ? 'BOLy is processing...' : 'BOLy is typing...'}
                     </Text>
                   </View>
                 </View>
               </View>
             )}
           </ScrollView>
+          
           {waitingForInput && (
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.textInput}
                 value={messageInput}
                 onChangeText={setMessageInput}
-                placeholder={`Enter value for ${currentField}...`}
-                onSubmitEditing={() => handleFieldUpdate(messageInput)}
+                placeholder="Enter your response..."
+                onSubmitEditing={() => handleTextInput(messageInput)}
                 autoFocus
                 editable={!isLoading}
                 blurOnSubmit={false}
+                multiline
               />
               <TouchableOpacity
-                onPress={() => handleFieldUpdate(messageInput)}
+                onPress={() => handleTextInput(messageInput)}
                 disabled={!messageInput.trim() || isLoading}
                 style={[styles.sendButton, (!messageInput.trim() || isLoading) && styles.disabledButton]}
               >
@@ -486,11 +445,12 @@ export default function ChatInterface({ navigation, route }) {
               </TouchableOpacity>
             </View>
           )}
+          
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
                 {sessionCompleted ? 'Session completed!' :
-                  conversation.length > 0 ? 'BOLy is ready to help!' : 'Loading conversation...'}
+                  conversation.length > 0 ? 'BOLy is ready to help!' : 'Initializing conversation...'}
               </Text>
             </View>
           )}
@@ -525,6 +485,8 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
+    paddingTop: 10
   },
   headerSubtitle: {
     color: '#c7d2fe',
