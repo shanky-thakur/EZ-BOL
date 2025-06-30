@@ -24,8 +24,7 @@ const getApiUrl = () => {
 };
 
 const API_BASE_URL = getApiUrl();
-const CHAT_API_URL = 'https://thakur.app.n8n.cloud/webhook/f19d4ceb-8883-4b3e-b324-ef31b8262e83/chat';
-
+const CHAT_API_URL = 'https://semsy-boy.app.n8n.cloud/webhook/f19d4ceb-8883-4b3e-b324-ef31b8262e83/chat';
 export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
   const bolId = route?.params?.bolId;
@@ -52,16 +51,16 @@ export default function ChatInterface({ navigation, route }) {
     try {
       setIsLoading(true);
       setAwaitingResponse(true);
-      
+
       const requestBody = {
         sessionId: sessionId,
         action: "sendMessage",
         chatInput: message
       };
-      
+
       console.log('Sending request to:', CHAT_API_URL);
       console.log('Request body:', JSON.stringify(requestBody, null, 2));
-      
+
       const response = await fetch(CHAT_API_URL, {
         method: 'POST',
         headers: {
@@ -72,11 +71,11 @@ export default function ChatInterface({ navigation, route }) {
 
       console.log('Response status:', response.status);
       console.log('Response headers:', response.headers);
-      
+
       // Try to get response text first
       const responseText = await response.text();
       console.log('Raw response:', responseText);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
       }
@@ -89,7 +88,7 @@ export default function ChatInterface({ navigation, route }) {
         console.error('Failed to parse JSON:', parseError);
         throw new Error(`Invalid JSON response: ${responseText}`);
       }
-      
+
       console.log('Parsed response:', JSON.stringify(data, null, 2));
       return data;
     } catch (error) {
@@ -106,18 +105,68 @@ export default function ChatInterface({ navigation, route }) {
     if (response.options && Array.isArray(response.options) && response.options.length > 0) {
       return {
         type: 'options',
-        text: response.message || response.text || '',
+        text: response.output || response.message || response.text || '',
         options: response.options
       };
     }
-    
+
+    // Get the text from the response - now checking for 'output' field first
+    const text = response.output || response.message || response.text || '';
+
+    // Check if response contains a numbered list that should become buttons
+    const hasNumberedList = /\d+\.\s+/.test(text);
+    if (hasNumberedList) {
+      // Extract numbered items and convert to buttons
+      const lines = text.split('\n');
+      const options = [];
+      let cleanText = '';
+
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        // Check if line starts with number followed by dot and space
+        const match = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
+        if (match) {
+          options.push(match[2]); // Add the text after "1. "
+        } else {
+          // Keep non-numbered lines as part of the message
+          if (cleanText) cleanText += '\n';
+          cleanText += trimmedLine;
+        }
+      });
+
+      if (options.length > 0) {
+        return {
+          type: 'options',
+          text: cleanText,
+          options: options
+        };
+      }
+    }
+
+    // Check if response is asking a yes/no question (only for initial question)
+    const isInitialYesNoQuestion = text.includes('?') &&
+      text.toLowerCase().includes('is there any update needed');
+
+    if (isInitialYesNoQuestion) {
+      return {
+        type: 'options',
+        text: text,
+        options: ['Yes', 'No']
+      };
+    }
+
     // Check if response is asking for input (common patterns)
-    const text = response.message || response.text || '';
-    const isInputRequest = text.toLowerCase().includes('enter') || 
-                          text.toLowerCase().includes('input') || 
-                          text.toLowerCase().includes('provide') ||
-                          text.includes(':') && text.toLowerCase().includes('value');
-    
+    const isInputRequest = text.toLowerCase().includes('enter') ||
+      text.toLowerCase().includes('input') ||
+      text.toLowerCase().includes('provide') ||
+      text.includes(':') && text.toLowerCase().includes('value') ||
+      text.toLowerCase().includes("what's the") ||
+      text.toLowerCase().includes('what is the') ||
+      text.toLowerCase().includes('updated') && text.includes('?') ||
+      text.toLowerCase().includes('new value') ||
+      text.toLowerCase().includes('please enter') ||
+      text.toLowerCase().includes('type the');
+
     if (isInputRequest) {
       return {
         type: 'input',
@@ -127,10 +176,10 @@ export default function ChatInterface({ navigation, route }) {
     }
 
     // Check if session is completed
-    const isCompleted = text.toLowerCase().includes('completed') || 
-                       text.toLowerCase().includes('finished') ||
-                       text.toLowerCase().includes('done') ||
-                       response.sessionComplete === true;
+    const isCompleted = text.toLowerCase().includes('completed') ||
+      text.toLowerCase().includes('finished') ||
+      text.toLowerCase().includes('done') ||
+      response.sessionComplete === true;
 
     if (isCompleted) {
       return {
@@ -159,7 +208,7 @@ export default function ChatInterface({ navigation, route }) {
         setWelcomeShown(false);
         setAwaitingResponse(false);
         setWaitingForInput(false);
-        
+
         setTimeout(() => {
           initializeChat();
         }, 500);
@@ -191,9 +240,9 @@ export default function ChatInterface({ navigation, route }) {
       console.log('Sending option to bot:', option);
       const botResponse = await sendMessageToBot(option);
       console.log('Bot response for option:', botResponse);
-      
+
       const processedResponse = processBotResponse(botResponse);
-      
+
       // Add bot response to conversation
       setTimeout(() => {
         appendMessage({
@@ -209,7 +258,7 @@ export default function ChatInterface({ navigation, route }) {
         } else if (processedResponse.type === 'completed') {
           setSessionCompleted(true);
         }
-        
+
         setAwaitingResponse(false);
       }, 400);
 
@@ -245,7 +294,7 @@ export default function ChatInterface({ navigation, route }) {
       // Send input to bot
       const botResponse = await sendMessageToBot(inputText);
       const processedResponse = processBotResponse(botResponse);
-      
+
       // Add bot response to conversation
       setTimeout(() => {
         appendMessage({
@@ -261,7 +310,7 @@ export default function ChatInterface({ navigation, route }) {
         } else if (processedResponse.type === 'completed') {
           setSessionCompleted(true);
         }
-        
+
         setAwaitingResponse(false);
       }, 800);
 
@@ -282,7 +331,7 @@ export default function ChatInterface({ navigation, route }) {
   const initializeChat = useCallback(async () => {
     if (welcomeShown) return;
     setWelcomeShown(true);
-    
+
     // Show welcome message
     appendMessage({
       id: uuid.v4(),
@@ -296,9 +345,9 @@ export default function ChatInterface({ navigation, route }) {
       console.log('Initializing chat with sessionId:', sessionId);
       const botResponse = await sendMessageToBot('Hello');
       console.log('Bot response received:', botResponse);
-      
+
       const processedResponse = processBotResponse(botResponse);
-      
+
       setTimeout(() => {
         appendMessage({
           id: uuid.v4(),
@@ -310,7 +359,7 @@ export default function ChatInterface({ navigation, route }) {
         if (processedResponse.type === 'input') {
           setWaitingForInput(true);
         }
-        
+
         setAwaitingResponse(false);
       }, 1000);
 
@@ -335,14 +384,14 @@ export default function ChatInterface({ navigation, route }) {
       ]);
       return;
     }
-    
+
     initializeChat();
-    
+
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       navigation.goBack();
       return true;
     });
-    
+
     return () => backHandler.remove();
   }, []); // Only run on mount
 
@@ -358,19 +407,19 @@ export default function ChatInterface({ navigation, route }) {
               <Text style={styles.headerTitle}>BOL Update Assistant</Text>
             </View>
           </View>
-          
+
           <View style={styles.infoBar}>
             <Text style={styles.infoText}>
               📱 {phoneNumber} • 🤖 BOLy Assistant • 📝 BOL: {bolId}
             </Text>
           </View>
-          
+
           <View style={styles.progressBar}>
             <Text style={styles.progressText}>
               Session ID: {sessionId} • Status: {sessionCompleted ? 'Completed' : 'Active'}
             </Text>
           </View>
-          
+
           <ScrollView
             ref={scrollViewRef}
             style={styles.chatArea}
@@ -389,7 +438,7 @@ export default function ChatInterface({ navigation, route }) {
                   </View>
                   {msg.role === 'user' && <View style={styles.userAvatar}><Text>👤</Text></View>}
                 </View>
-                
+
                 {msg.role === 'bot' && msg.options && (
                   <View style={styles.optionsContainer}>
                     {msg.options.map((option, index) => (
@@ -406,7 +455,7 @@ export default function ChatInterface({ navigation, route }) {
                 )}
               </View>
             ))}
-            
+
             {awaitingResponse && (
               <View style={styles.messageContainer}>
                 <View style={styles.botMessageRow}>
@@ -420,7 +469,7 @@ export default function ChatInterface({ navigation, route }) {
               </View>
             )}
           </ScrollView>
-          
+
           {waitingForInput && (
             <View style={styles.inputContainer}>
               <TextInput
@@ -445,7 +494,7 @@ export default function ChatInterface({ navigation, route }) {
               </TouchableOpacity>
             </View>
           )}
-          
+
           {!waitingForInput && (
             <View style={styles.statusBar}>
               <Text style={styles.statusText}>
