@@ -10,20 +10,6 @@ import {
   Alert,
   ActivityIndicator
 } from 'react-native';
-import Constants from 'expo-constants';
-
-// Get the correct API URL for development
-const getApiUrl = () => {
-  if (__DEV__) {
-    // For Expo development - this gets computer's IP automatically
-    const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
-    return `http://${debuggerHost}:3000`;
-  }
-  // For production, use actual API URL
-  return 'https://production-api.com';
-};
-
-const API_BASE_URL = getApiUrl();
 
 export default function BOLListScreen({ navigation, route }) {
   // Get phone number from previous screen or use default
@@ -33,6 +19,35 @@ export default function BOLListScreen({ navigation, route }) {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
+  // Map API response to component expected format
+  const mapBolData = (rawBols) => {
+    // Check if rawBols is an array directly, not nested in a 'bols' property
+    const bolArray = Array.isArray(rawBols) ? rawBols : (rawBols.bols || []);
+    
+    return bolArray.map(bol => ({
+      _id: bol.row_number || bol._id,
+      row_number: bol.row_number,
+      shipper: bol.Shipper || bol['Shipper Name'] || 'Unknown Shipper',
+      proBarcode: bol['PRO Barcode'] || bol.proBarcode || 'N/A',
+      shipperCity: bol['Shipper City'] || bol.shipperCity || 'Unknown',
+      consigneeCity: bol['Consignee City'] || bol.consigneeCity || 'Unknown',
+      Dtae: bol.Date || bol.Dtae || 'N/A', // Note: keeping original typo for compatibility
+      weight: bol.Weight || bol.weight || 'N/A',
+      packageName: bol['Kind of Packaging'] || bol.packageName || 'Package',
+      status: bol.status || 'pending', // Default status if not provided
+      // Additional fields that might be useful
+      shipperName: bol['Shipper Name'] || bol.shipperName,
+      consigneeName: bol['Consignee Name'] || bol.consigneeName,
+      amount: bol.Amount || bol.amount,
+      hazmat: bol.Hazmat || bol.hazmat,
+      units: bol.Units || bol.units,
+      nmfcCode: bol['NMFC Code'] || bol.nmfcCode,
+      customerRefNumber: bol['Customer Reference Number'] || bol.customerRefNumber,
+      // Store original data for reference
+      originalData: bol
+    }));
+  };
 
   // Fetch BOLs function
   const fetchBols = async (showRefreshLoader = false) => {
@@ -44,22 +59,42 @@ export default function BOLListScreen({ navigation, route }) {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/bol/get-bols`, {
+      const res = await fetch('https://semsy-boy.app.n8n.cloud/webhook-test/today_shipment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneNumber }),
+        headers: { 'Content-Type': 'application/json' }
       });
       
-      const data = await res.json();
-      
-      if (res.ok && data.success) {
-        setBols(data.bols);
-      } else {
-        throw new Error(data.message || 'Failed to fetch BOLs');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
       }
+      
+      const data = await res.json();
+      console.log('Raw API Response:', data);
+      
+      // Handle the response - it might be an array directly or have a nested structure
+      let mappedBols = [];
+      if (Array.isArray(data)) {
+        // If data is directly an array
+        mappedBols = mapBolData(data);
+      } else if (data && data.bols && Array.isArray(data.bols)) {
+        // If data has a 'bols' property that's an array
+        mappedBols = mapBolData(data.bols);
+      } else if (data && typeof data === 'object') {
+        // If data is an object, try to find array values
+        const possibleArrays = Object.values(data).filter(val => Array.isArray(val));
+        if (possibleArrays.length > 0) {
+          mappedBols = mapBolData(possibleArrays[0]);
+        }
+      }
+      
+      console.log('Mapped BOL data:', mappedBols);
+      setBols(mappedBols);
+      
     } catch (err) {
-      setError(err.message);
-      Alert.alert('Error', err.message);
+      const errorMessage = err.message || 'Failed to fetch BOLs';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
+      console.error('Fetch error:', err);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -109,7 +144,7 @@ export default function BOLListScreen({ navigation, route }) {
   // Render individual BOL item
   const renderBolItem = (bol, index) => (
     <TouchableOpacity
-      key={bol._id || index}
+      key={bol.row_number || bol._id || index}
       style={styles.bolCard}
       onPress={() => handleBolSelect(bol)}
       activeOpacity={0.7}
@@ -134,7 +169,7 @@ export default function BOLListScreen({ navigation, route }) {
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>🎯</Text>
-          <Text style={styles.detailText}>To: {bol.consigneeCity || 'Not specified'}</Text>
+          <Text style={styles.detailText}>To: {bol.consigneeCity}</Text>
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>📅</Text>
@@ -142,12 +177,29 @@ export default function BOLListScreen({ navigation, route }) {
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>⚖️</Text>
-          <Text style={styles.detailText}>Weight: {bol.weight || 'Not specified'}</Text>
+          <Text style={styles.detailText}>Weight: {bol.weight} {bol.units || ''}</Text>
         </View>
+        {bol.amount && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailIcon}>💰</Text>
+            <Text style={styles.detailText}>Amount: ${bol.amount}</Text>
+          </View>
+        )}
+        {bol.hazmat && bol.hazmat.toLowerCase() === 'yes' && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailIcon}>⚠️</Text>
+            <Text style={styles.detailText}>Hazmat: Yes</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.bolFooter}>
-        <Text style={styles.packageName}>{bol.packageName || 'Package'}</Text>
+        <View style={styles.packageInfo}>
+          <Text style={styles.packageName}>{bol.packageName}</Text>
+          {bol.customerRefNumber && (
+            <Text style={styles.refNumber}>Ref: {bol.customerRefNumber}</Text>
+          )}
+        </View>
         <TouchableOpacity 
           style={styles.chatButton}
           onPress={(e) => {
@@ -447,11 +499,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
+  packageInfo: {
+    flex: 1,
+  },
   packageName: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
-    flex: 1,
+  },
+  refNumber: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
   },
   chatButton: {
     backgroundColor: '#4f46e5',
