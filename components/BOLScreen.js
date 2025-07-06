@@ -127,7 +127,8 @@ export default function BOLListScreen({ navigation, route }) {
     navigation.navigate('Home', { 
       phoneNumber: phoneNumber,
       selectedBol: bol,
-      bolId: bol._id
+      bolId: bol._id,
+      row_number: bol.row_number
     });
   };
 
@@ -137,7 +138,8 @@ export default function BOLListScreen({ navigation, route }) {
     navigation.navigate('Home', { 
       phoneNumber: phoneNumber,
       selectedBol: bol,
-      bolId: bol._id
+      bolId: bol._id,
+      row_number: bol.row_number
     });
   };
 

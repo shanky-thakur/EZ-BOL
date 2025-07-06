@@ -12,22 +12,13 @@ import {
   Platform,
   BackHandler
 } from 'react-native';
-import Constants from 'expo-constants';
 import uuid from 'react-native-uuid';
 
-const getApiUrl = () => {
-  if (__DEV__) {
-    const debuggerHost = Constants.expoConfig?.hostUri?.split(':').shift();
-    return `http://${debuggerHost}:3000`;
-  }
-  return 'https://your-production-api.com';
-};
-
-const API_BASE_URL = getApiUrl();
-const CHAT_API_URL = 'https://semsy-boy.app.n8n.cloud/webhook/f19d4ceb-8883-4b3e-b324-ef31b8262e83/chat';
+const CHAT_API_URL = 'https://advttr.app.n8n.cloud/webhook/59e40a1e-ba28-4439-99ad-55b7dd146e4c/chat';
 export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
   const bolId = route?.params?.bolId;
+  const row_number = `${route?.params?.row_number}` || "1";
 
   const conversationRef = useRef([]);
   const [conversation, setConversation] = useState([]);
@@ -113,22 +104,37 @@ export default function ChatInterface({ navigation, route }) {
     // Get the text from the response - now checking for 'output' field first
     const text = response.output || response.message || response.text || '';
 
-    // Check if response contains a numbered list that should become buttons
+    // Check if response contains a numbered list or bullet list that should become buttons
     const hasNumberedList = /\d+\.\s+/.test(text);
-    if (hasNumberedList) {
-      // Extract numbered items and convert to buttons
+    const hasBulletList = /^[\s]*[-•*]\s+/.test(text) || text.includes('- ') || text.includes('• ');
+
+    // Check if this is a summary/completion message (don't convert to buttons)
+    const isSummaryMessage = text.toLowerCase().includes('summary') ||
+      text.toLowerCase().includes('updated for row') ||
+      text.toLowerCase().includes('here\'s what was') ||
+      text.toLowerCase().includes('safe trip') ||
+      text.toLowerCase().includes('if you need anything else');
+
+    if ((hasNumberedList || hasBulletList) && !isSummaryMessage) {
+      // Extract numbered items or bullet items and convert to buttons
       const lines = text.split('\n');
       const options = [];
       let cleanText = '';
 
       lines.forEach(line => {
         const trimmedLine = line.trim();
+
         // Check if line starts with number followed by dot and space
-        const match = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
-        if (match) {
-          options.push(match[2]); // Add the text after "1. "
+        const numberedMatch = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
+        // Check if line starts with bullet point (-, •, or *)
+        const bulletMatch = trimmedLine.match(/^[-•*]\s+(.+)$/);
+
+        if (numberedMatch) {
+          options.push(numberedMatch[2]); // Add the text after "1. "
+        } else if (bulletMatch) {
+          options.push(bulletMatch[1]); // Add the text after "- "
         } else {
-          // Keep non-numbered lines as part of the message
+          // Keep non-list lines as part of the message
           if (cleanText) cleanText += '\n';
           cleanText += trimmedLine;
         }
@@ -143,35 +149,47 @@ export default function ChatInterface({ navigation, route }) {
       }
     }
 
-    // Check if response is asking a yes/no question (only for initial question)
-    const isInitialYesNoQuestion = text.includes('?') &&
-      text.toLowerCase().includes('is there any update needed');
-
-    if (isInitialYesNoQuestion) {
-      return {
-        type: 'options',
-        text: text,
-        options: ['Yes', 'No']
-      };
-    }
-
-    // Check if response is asking for input (common patterns)
+    // Check if response is asking for input (common patterns) - CHECK THIS FIRST
     const isInputRequest = text.toLowerCase().includes('enter') ||
       text.toLowerCase().includes('input') ||
       text.toLowerCase().includes('provide') ||
       text.includes(':') && text.toLowerCase().includes('value') ||
       text.toLowerCase().includes("what's the") ||
       text.toLowerCase().includes('what is the') ||
-      text.toLowerCase().includes('updated') && text.includes('?') ||
+      text.toLowerCase().includes('updated value') ||
       text.toLowerCase().includes('new value') ||
       text.toLowerCase().includes('please enter') ||
-      text.toLowerCase().includes('type the');
+      text.toLowerCase().includes('type the') ||
+      text.toLowerCase().includes('current value') && text.includes('?');
 
     if (isInputRequest) {
       return {
         type: 'input',
         text: text,
         options: null
+      };
+    }
+
+    // Check if response is asking a yes/no question (updated condition) - CHECK THIS AFTER INPUT
+    const isYesNoQuestion = text.includes('?') && (
+      text.toLowerCase().includes('updates needed') ||
+      text.toLowerCase().includes('is there any update needed') ||
+      text.toLowerCase().includes('any updates needed') ||
+      text.toLowerCase().includes('need any updates') ||
+      text.toLowerCase().includes('require updates') ||
+      text.toLowerCase().includes('changes needed')
+    );
+
+    // Check if this is asking "if you need anything else" - should be Yes/No
+    const isAnythingElseQuestion = text.toLowerCase().includes('if you need anything else') ||
+      text.toLowerCase().includes('need anything else') ||
+      text.toLowerCase().includes('anything else') && text.includes('?');
+
+    if (isYesNoQuestion || isAnythingElseQuestion) {
+      return {
+        type: 'options',
+        text: text,
+        options: ['Yes', 'No']
       };
     }
 
@@ -341,9 +359,10 @@ export default function ChatInterface({ navigation, route }) {
     });
 
     try {
-      // Test with a simple message first
+      // Use row_number instead of "Hello" for initialization
       console.log('Initializing chat with sessionId:', sessionId);
-      const botResponse = await sendMessageToBot('Hello');
+      console.log('Using row_number for initialization:', row_number);
+      const botResponse = await sendMessageToBot(row_number);
       console.log('Bot response received:', botResponse);
 
       const processedResponse = processBotResponse(botResponse);
@@ -375,7 +394,7 @@ export default function ChatInterface({ navigation, route }) {
         setAwaitingResponse(false);
       }, 1000);
     }
-  }, [phoneNumber, appendMessage, welcomeShown, sessionId]);
+  }, [phoneNumber, appendMessage, welcomeShown, sessionId, row_number]);
 
   useEffect(() => {
     if (!bolId) {
