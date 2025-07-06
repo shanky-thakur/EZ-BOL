@@ -15,10 +15,12 @@ import {
 import uuid from 'react-native-uuid';
 
 const CHAT_API_URL = 'https://advttr.app.n8n.cloud/webhook/59e40a1e-ba28-4439-99ad-55b7dd146e4c/chat';
+
 export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
   const bolId = route?.params?.bolId;
   const row_number = `${route?.params?.row_number}` || "1";
+  const selectedBol = route?.params?.selectedBol; // Get the selected BOL data
 
   const conversationRef = useRef([]);
   const [conversation, setConversation] = useState([]);
@@ -36,6 +38,163 @@ export default function ChatInterface({ navigation, route }) {
     conversationRef.current = [...conversationRef.current, msg];
     setConversation([...conversationRef.current]);
   }, []);
+
+  // Updated formatBolData function to show all 25 fields dynamically (excluding status)
+  const formatBolData = (bol) => {
+    if (!bol) return "No BOL data available";
+
+    const formatField = (label, value) => {
+      // Skip empty, null, undefined, 'N/A', 'Unknown', 'Unknown Shipper', 'status', id, row_number, and authorized sign fields
+      if (!value ||
+        value === 'N/A' ||
+        value === 'Unknown' ||
+        value === 'Unknown Shipper' ||
+        value === '' ||
+        label.toLowerCase().includes('status') ||
+        label.toLowerCase().includes('id') ||
+        label.toLowerCase().includes('row') ||
+        label.toLowerCase().includes('authorized') ||
+        label.toLowerCase().includes('sign')) {
+        return null;
+      }
+      return `${label}: ${value}`;
+    };
+
+    // Define all possible field mappings with emojis for better display
+    const fieldMappings = {
+      // Core identification fields
+      proBarcode: '🏷️ PRO Barcode',
+
+      // Shipper information
+      shipper: '📦 Shipper',
+      shipperName: '👤 Shipper Name',
+      shipperCity: '📍 Shipper City',
+
+      // Consignee information
+      consigneeName: '👤 Consignee Name',
+      consigneeCity: '🎯 Consignee City',
+
+      // Date and timing
+      Dtae: '📅 Date',
+      Date: '📅 Date',
+
+      // Weight and measurements
+      weight: '⚖️ Weight',
+      units: '📏 Units',
+
+      // Package information
+      packageName: '📋 Package Type',
+      'Kind of Packaging': '📋 Package Type',
+
+      // Financial information
+      amount: '💰 Amount',
+      Amount: '💰 Amount',
+
+      // Reference and tracking
+      customerRefNumber: '📋 Customer Ref',
+      'Customer Reference Number': '📋 Customer Ref',
+      nmfcCode: '🏷️ NMFC Code',
+      'NMFC Code': '🏷️ NMFC Code',
+
+      // Safety and compliance
+      hazmat: '⚠️ Hazmat',
+      Hazmat: '⚠️ Hazmat',
+
+      // Additional fields that might be present
+      freight: '🚛 Freight',
+      'Freight Class': '🚛 Freight Class',
+      freightClass: '🚛 Freight Class',
+      commodityDescription: '📝 Commodity Description',
+      'Commodity Description': '📝 Commodity Description',
+      specialInstructions: '📋 Special Instructions',
+      'Special Instructions': '📋 Special Instructions',
+      deliveryInstructions: '📋 Delivery Instructions',
+      'Delivery Instructions': '📋 Delivery Instructions',
+
+      // Contact information
+      shipperPhone: '📞 Shipper Phone',
+      'Shipper Phone': '📞 Shipper Phone',
+      consigneePhone: '📞 Consignee Phone',
+      'Consignee Phone': '📞 Consignee Phone',
+
+      // Address fields
+      shipperAddress: '🏠 Shipper Address',
+      'Shipper Address': '🏠 Shipper Address',
+      consigneeAddress: '🏠 Consignee Address',
+      'Consignee Address': '🏠 Consignee Address',
+
+      // Billing and payment
+      billTo: '💳 Bill To',
+      'Bill To': '💳 Bill To',
+      paymentTerms: '💳 Payment Terms',
+      'Payment Terms': '💳 Payment Terms',
+
+      // Carrier information
+      carrier: '🚛 Carrier',
+      Carrier: '🚛 Carrier',
+      driverName: '👨‍✈️ Driver Name',
+      'Driver Name': '👨‍✈️ Driver Name',
+
+      // Timestamps
+      createdAt: '🕐 Created At',
+      updatedAt: '🕐 Updated At',
+
+      // Additional tracking
+      trackingNumber: '📍 Tracking Number',
+      'Tracking Number': '📍 Tracking Number',
+
+      // Equipment
+      equipment: '🚛 Equipment',
+      Equipment: '🚛 Equipment',
+
+      // Insurance
+      insurance: '🛡️ Insurance',
+      Insurance: '🛡️ Insurance'
+    };
+
+    // Process all fields in the BOL object
+    const fields = [];
+
+    // First, add the original data fields if they exist
+    if (bol.originalData) {
+      Object.keys(bol.originalData).forEach(key => {
+        if (key.toLowerCase() !== 'status' &&
+          !key.toLowerCase().includes('id') &&
+          !key.toLowerCase().includes('row') &&
+          !key.toLowerCase().includes('authorized') &&
+          !key.toLowerCase().includes('sign')) { // Skip excluded fields
+          const label = fieldMappings[key] || `📋 ${key}`;
+          const value = bol.originalData[key];
+          const formatted = formatField(label, value);
+          if (formatted) {
+            fields.push(formatted);
+          }
+        }
+      });
+    }
+
+    // Then add the mapped fields, avoiding duplicates
+    Object.keys(bol).forEach(key => {
+      if (key !== 'originalData' &&
+        key.toLowerCase() !== 'status' &&
+        !key.toLowerCase().includes('id') &&
+        !key.toLowerCase().includes('row') &&
+        !key.toLowerCase().includes('authorized') &&
+        !key.toLowerCase().includes('sign')) { // Skip excluded fields
+        const label = fieldMappings[key] || `📋 ${key}`;
+        const value = bol[key];
+        const formatted = formatField(label, value);
+        if (formatted && !fields.includes(formatted)) {
+          fields.push(formatted);
+        }
+      }
+    });
+
+    // Remove duplicates (in case the same field appears in both original and mapped data)
+    const uniqueFields = [...new Set(fields)];
+
+    return uniqueFields.length > 0 ? uniqueFields.join('\n') : "No detailed information available";
+  };
 
   // API call to chatbot
   const sendMessageToBot = async (message) => {
@@ -350,11 +509,13 @@ export default function ChatInterface({ navigation, route }) {
     if (welcomeShown) return;
     setWelcomeShown(true);
 
-    // Show welcome message
+    // Format and show BOL data instead of generic welcome message
+    const bolDataText = formatBolData(selectedBol);
+
     appendMessage({
       id: uuid.v4(),
       role: 'bot',
-      text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nI'll help you update your BOL fields systematically. Let me get started...`,
+      text: `Hello! I'm BOLy, your BOL update assistant for ${phoneNumber}.\n\nHere's the current BOL data I'll help you update:\n\n${bolDataText}\n\nLet me get started with the update process...`,
       options: null
     });
 
@@ -394,7 +555,7 @@ export default function ChatInterface({ navigation, route }) {
         setAwaitingResponse(false);
       }, 1000);
     }
-  }, [phoneNumber, appendMessage, welcomeShown, sessionId, row_number]);
+  }, [phoneNumber, appendMessage, welcomeShown, sessionId, row_number, selectedBol]);
 
   useEffect(() => {
     if (!bolId) {
