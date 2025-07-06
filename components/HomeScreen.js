@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import uuid from 'react-native-uuid';
 
-const CHAT_API_URL = 'https://advttr.app.n8n.cloud/webhook/59e40a1e-ba28-4439-99ad-55b7dd146e4c/chat';
+const CHAT_API_URL = 'https://deepanshuthakurmc22a1373.app.n8n.cloud/webhook/59e40a1e-ba28-4439-99ad-55b7dd146e4c/chat';
 
 export default function ChatInterface({ navigation, route }) {
   const phoneNumber = route?.params?.phoneNumber || '+919625348422';
