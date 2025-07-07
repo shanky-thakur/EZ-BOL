@@ -329,14 +329,25 @@ export default function ChatInterface({ navigation, route }) {
       };
     }
 
-    // Check if response is asking a yes/no question (updated condition) - CHECK THIS AFTER INPUT
+    // Enhanced Yes/No question detection
     const isYesNoQuestion = text.includes('?') && (
+      // Original patterns
       text.toLowerCase().includes('updates needed') ||
       text.toLowerCase().includes('is there any update needed') ||
       text.toLowerCase().includes('any updates needed') ||
       text.toLowerCase().includes('need any updates') ||
       text.toLowerCase().includes('require updates') ||
-      text.toLowerCase().includes('changes needed')
+      text.toLowerCase().includes('changes needed') ||
+      // New patterns for your specific case
+      text.toLowerCase().includes('want to update') ||
+      text.toLowerCase().includes('would you like to update') ||
+      text.toLowerCase().includes('do you want to update') ||
+      text.toLowerCase().includes('confirm if you want') ||
+      text.toLowerCase().includes('please confirm') ||
+      // Generic patterns that mention "yes" and "no" explicitly
+      (text.toLowerCase().includes('yes') && text.toLowerCase().includes('no')) ||
+      // Pattern for "let me know yes/no"
+      text.toLowerCase().includes('let me know') && (text.toLowerCase().includes('yes') || text.toLowerCase().includes('no'))
     );
 
     // Check if this is asking "if you need anything else" - should be Yes/No
@@ -345,6 +356,23 @@ export default function ChatInterface({ navigation, route }) {
       text.toLowerCase().includes('anything else') && text.includes('?');
 
     if (isYesNoQuestion || isAnythingElseQuestion) {
+      return {
+        type: 'options',
+        text: text,
+        options: ['Yes', 'No']
+      };
+    }
+
+    // Check if this is a summary/completion message that should have Yes/No options
+    const isSummaryWithOptions = text.toLowerCase().includes('final summary') ||
+      text.toLowerCase().includes('updated fields for row') ||
+      text.toLowerCase().includes('you\'re all set') ||
+      text.toLowerCase().includes('safe travels') ||
+      text.toLowerCase().includes('thanks for updating') ||
+      text.toLowerCase().includes('summary of the updated fields') ||
+      text.toLowerCase().includes('if everything looks good');
+
+    if (isSummaryWithOptions) {
       return {
         type: 'options',
         text: text,
