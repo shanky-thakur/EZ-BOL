@@ -59,7 +59,7 @@ export default function BOLListScreen({ navigation, route }) {
     setError(null);
 
     try {
-      const res = await fetch('https://semsy-boy.app.n8n.cloud/webhook-test/today_shipment', {
+      const res = await fetch('https://pradhanashish.app.n8n.cloud/webhook-test/today_shipment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
