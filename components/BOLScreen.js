@@ -20,11 +20,24 @@ export default function BOLListScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
+  // Function to process phone number (remove +91 prefix)
+  const processPhoneNumber = (phone) => {
+    // Remove +91 prefix if present
+    if (phone.startsWith('+91')) {
+      return phone.substring(3);
+    }
+    // Remove 91 prefix if present (in case it's without +)
+    if (phone.startsWith('91') && phone.length > 10) {
+      return phone.substring(2);
+    }
+    return phone;
+  };
+
   // Map API response to component expected format
   const mapBolData = (rawBols) => {
     // Check if rawBols is an array directly, not nested in a 'bols' property
     const bolArray = Array.isArray(rawBols) ? rawBols : (rawBols.bols || []);
-    
+
     return bolArray.map(bol => ({
       _id: bol.row_number || bol._id,
       row_number: bol.row_number,
@@ -59,18 +72,29 @@ export default function BOLListScreen({ navigation, route }) {
     setError(null);
 
     try {
+      // Process phone number to remove +91 prefix
+      const processedPhoneNumber = processPhoneNumber(phoneNumber);
+      
+      console.log('Original phone number:', phoneNumber);
+      console.log('Processed phone number:', processedPhoneNumber);
+
       const res = await fetch('https://pradhanashish.app.n8n.cloud/webhook-test/today_shipment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          "Shipper Telephone No": processedPhoneNumber
+        }),
       });
-      
+
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
-      
+
       const data = await res.json();
       console.log('Raw API Response:', data);
-      
+
       // Handle the response - it might be an array directly or have a nested structure
       let mappedBols = [];
       if (Array.isArray(data)) {
@@ -86,10 +110,10 @@ export default function BOLListScreen({ navigation, route }) {
           mappedBols = mapBolData(possibleArrays[0]);
         }
       }
-      
+
       console.log('Mapped BOL data:', mappedBols);
       setBols(mappedBols);
-      
+
     } catch (err) {
       const errorMessage = err.message || 'Failed to fetch BOLs';
       setError(errorMessage);
@@ -117,14 +141,14 @@ export default function BOLListScreen({ navigation, route }) {
       navigation.goBack();
     } else {
       // If can't go back, navigate to a default screen
-      navigation.navigate('Login'); 
+      navigation.navigate('Login');
     }
   };
 
   // Handle BOL selection
   const handleBolSelect = (bol) => {
     // Navigate to chat interface with selected BOL
-    navigation.navigate('Home', { 
+    navigation.navigate('Home', {
       phoneNumber: phoneNumber,
       selectedBol: bol,
       bolId: bol._id,
@@ -135,7 +159,7 @@ export default function BOLListScreen({ navigation, route }) {
   // Handle chat button press
   const handleChatPress = (bol) => {
     // Prevent event bubbling
-    navigation.navigate('Home', { 
+    navigation.navigate('Home', {
       phoneNumber: phoneNumber,
       selectedBol: bol,
       bolId: bol._id,
@@ -202,7 +226,7 @@ export default function BOLListScreen({ navigation, route }) {
             <Text style={styles.refNumber}>Ref: {bol.customerRefNumber}</Text>
           )}
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.chatButton}
           onPress={(e) => {
             e.stopPropagation(); // Prevent parent onPress
