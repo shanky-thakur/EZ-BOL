@@ -622,12 +622,6 @@ export default function ChatInterface({ navigation, route }) {
             </Text>
           </View>
 
-          <View style={styles.progressBar}>
-            <Text style={styles.progressText}>
-              Session ID: {sessionId} • Status: {sessionCompleted ? 'Completed' : 'Active'}
-            </Text>
-          </View>
-
           <ScrollView
             ref={scrollViewRef}
             style={styles.chatArea}
@@ -760,18 +754,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     textAlign: 'center',
-  },
-  progressBar: {
-    backgroundColor: '#f8fafc',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  progressText: {
-    fontSize: 11,
-    color: '#475569',
-    textAlign: 'center',
-    fontWeight: '500',
   },
   chatArea: {
     flex: 1,
